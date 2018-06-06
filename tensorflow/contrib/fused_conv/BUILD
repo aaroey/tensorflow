@@ -97,6 +97,7 @@ tf_custom_op_library(
         "//tensorflow/core/kernels:ops_util_hdrs",
         "@local_config_cuda//cuda:cudnn_header",
     ],
+    linkopts = ["-shared-libgcc /usr/local/google/home/laigd/.local/lib/python2.7/site-packages/tensorflow/python/_pywrap_tensorflow_internal.so -Xlinker --unresolved-symbols=ignore-in-shared-libs"],
 )
 
 tf_gen_op_libs(

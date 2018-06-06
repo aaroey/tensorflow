@@ -636,6 +636,7 @@ DECLARE_GPU_SPEC(int32);
 
 // Registration of the GPU implementations.
 
+/*
 REGISTER_KERNEL_BUILDER(
     Name("FusedConv2DBiasActivation")
         .Device(DEVICE_GPU)
@@ -644,6 +645,7 @@ REGISTER_KERNEL_BUILDER(
         .HostMemory("conv_input_scale")
         .HostMemory("side_input_scale"),
     FusedConv2DBiasActivationOp<GPUDevice, float, float, float>);
+*/
 
 REGISTER_KERNEL_BUILDER(
     Name("FusedConv2DBiasActivation")
