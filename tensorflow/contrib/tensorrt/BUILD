@@ -238,6 +238,7 @@ tf_cuda_library(
         "//tensorflow/core/grappler/clusters:cluster",
         "//tensorflow/core/grappler/optimizers:custom_graph_optimizer",
         "//tensorflow/core/grappler/optimizers:custom_graph_optimizer_registry",
+        ":trt_resources",  # This will cause problems: linked by the trt_ops_py via trt_engine_op_loader via either _trt_engine_op.so (externally) or kernel library (internal), and by trt_convert_py via here.
         "//tensorflow/core/grappler:grappler_item",
         "//tensorflow/core/grappler:utils",
         "//tensorflow/core:framework",
