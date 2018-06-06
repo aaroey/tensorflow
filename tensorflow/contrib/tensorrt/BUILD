@@ -28,6 +28,14 @@ load(
     "if_tensorrt",
 )
 
+filegroup(
+    name = "trt_kernel_sources",
+    srcs = [
+        "kernels/trt_calib_op.cc",
+        "kernels/trt_engine_op.cc",
+    ],
+)
+
 tf_cuda_cc_test(
     name = "tensorrt_test_cc",
     size = "small",
@@ -49,6 +57,7 @@ tf_cuda_cc_test(
 tf_custom_op_library(
     name = "python/ops/_trt_engine_op.so",
     srcs = [
+        ":trt_kernel_sources",
         "ops/trt_calib_op.cc",
         "ops/trt_engine_op.cc",
     ],
@@ -74,14 +83,7 @@ tf_cuda_library(
 
 cc_library(
     name = "trt_engine_op_kernel",
-    srcs = [
-        "kernels/trt_calib_op.cc",
-        "kernels/trt_engine_op.cc",
-    ],
-    hdrs = [
-        "kernels/trt_calib_op.h",
-        "kernels/trt_engine_op.h",
-    ],
+    srcs = [":trt_kernel_sources"],
     copts = tf_copts(),
     visibility = ["//visibility:public"],
     deps = [
@@ -188,7 +190,6 @@ tf_py_wrap_cc(
     copts = tf_copts(),
     deps = [
         ":trt_conversion",
-        ":trt_engine_op_kernel",
         "//tensorflow/core:framework_lite",
         "//util/python:python_headers",
     ],
@@ -233,7 +234,7 @@ tf_cuda_library(
     deps = [
         ":segment",
         ":trt_logging",
-        ":trt_resources",
+        ":trt_resources",  # This will cause problems: linked by the trt_ops_py via trt_engine_op_loader via either _trt_engine_op.so (externally) or kernel library (internal), and by trt_convert_py via here.
         "//tensorflow/core/grappler/clusters:cluster",
         "//tensorflow/core/grappler/optimizers:custom_graph_optimizer",
         "//tensorflow/core/grappler/optimizers:custom_graph_optimizer_registry",
