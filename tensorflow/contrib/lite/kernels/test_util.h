@@ -89,18 +89,24 @@ struct TensorData {
 class SingleOpResolver : public OpResolver {
  public:
   SingleOpResolver(const BuiltinOperator op, TfLiteRegistration* registration)
-      : op_(op), registration_(registration) {}
-  TfLiteRegistration* FindOp(BuiltinOperator op) const override {
+      : op_(op), registration_(*registration) {
+    registration_.builtin_code = static_cast<int32_t>(op);
+    registration_.version = 1;
+  }
+  const TfLiteRegistration* FindOp(BuiltinOperator op,
+                                   int version) const override {
     if (op == op_) {
-      return registration_;
+      return &registration_;
     }
     return nullptr;
   }
-  TfLiteRegistration* FindOp(const char* op) const override { return nullptr; }
+  const TfLiteRegistration* FindOp(const char* op, int version) const override {
+    return nullptr;
+  }
 
  private:
   const BuiltinOperator op_;
-  TfLiteRegistration* registration_;
+  TfLiteRegistration registration_;
 };
 
 class SingleOpModel {
@@ -108,13 +114,22 @@ class SingleOpModel {
   SingleOpModel() {}
   ~SingleOpModel() {}
 
+  // Set a function callback that is run right after graph is prepared
+  // that allows applying external delegates. This is useful for testing
+  // other runtimes like NN API or GPU.
+  void SetApplyDelegate(std::function<void(Interpreter*)> apply_delegate_fn) {
+    apply_delegate_fn_ = apply_delegate_fn;
+  }
+
   // Copying or assignment is disallowed to simplify ownership semantics.
   SingleOpModel(const SingleOpModel&) = delete;
   SingleOpModel& operator=(const SingleOpModel&) = delete;
 
   // Add a TensorType input tensor and return its index.
-  int AddInput(TensorType type) { return AddInput(TensorData{type}); }
-  int AddInput(const TensorData& t);
+  int AddInput(TensorType type, bool is_variable = false) {
+    return AddInput(TensorData{type}, is_variable);
+  }
+  int AddInput(const TensorData& t, bool is_variable = false);
 
   // Templated version of AddConstInput().
   template <typename T>
@@ -247,7 +262,8 @@ class SingleOpModel {
   }
 
   template <typename T>
-  int AddTensor(TensorData t, std::initializer_list<T> data) {
+  int AddTensor(TensorData t, std::initializer_list<T> data,
+                bool is_variable = false) {
     int id = tensors_.size();
 
     // This is slightly different depending on whether we are adding a
@@ -264,6 +280,9 @@ class SingleOpModel {
         } else if (t.type == TensorType_INT32) {
           std::tie(t.scale, t.zero_point) =
               QuantizationParams<int32_t>(t.min, t.max);
+        } else if (t.type == TensorType_INT16) {
+          std::tie(t.scale, t.zero_point) =
+              QuantizationParams<int16_t>(t.min, t.max);
         } else {
           LOG(FATAL) << "No support for the requested quantized type";
         }
@@ -296,7 +315,7 @@ class SingleOpModel {
     tensors_.push_back(CreateTensor(builder_,
                                     builder_.CreateVector<int>(t.shape), t.type,
                                     /*buffer=*/buffer_id,
-                                    /*name=*/0, q_params));
+                                    /*name=*/0, q_params, is_variable));
 
     tensor_data_[id] = t;
 
@@ -311,6 +330,9 @@ class SingleOpModel {
   std::vector<flatbuffers::Offset<Operator>> operators_;
   std::vector<flatbuffers::Offset<Buffer>> buffers_;
   std::map<string, std::function<TfLiteRegistration*()>> custom_registrations_;
+  // A function pointer that gets called after the interpreter is created but
+  // before evaluation happens. This is useful for applying a delegate.
+  std::function<void(Interpreter*)> apply_delegate_fn_;
 };
 
 // Base class for single op unit tests.

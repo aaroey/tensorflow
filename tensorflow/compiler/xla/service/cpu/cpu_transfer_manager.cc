@@ -88,8 +88,8 @@ CpuTransferManager::CpuTransferManager()
     : GenericTransferManager(se::host::kHostPlatformId,
                              /*pointer_size=*/sizeof(void*)) {}
 
-Status CpuTransferManager::TransferLiteralToInfeed(se::StreamExecutor* executor,
-                                                   const Literal& literal) {
+Status CpuTransferManager::TransferLiteralToInfeed(
+    se::StreamExecutor* executor, const LiteralSlice& literal) {
   const Shape& shape = literal.shape();
   VLOG(2) << "Transferring literal to infeed with shape: "
           << ShapeUtil::HumanString(shape);
@@ -160,9 +160,8 @@ CpuTransferManager::TransferBufferToInfeedInternal(se::StreamExecutor* executor,
 
   int32 size_32 = static_cast<int32>(size);
   CpuInfeedBuffer* queued_buffer = new CpuInfeedBuffer(size_32);
-  Status s =
-      TransferBufferToDevice(executor, /*size=*/size,
-                             /*source=*/source, queued_buffer->device_memory());
+  Status s = executor->SynchronousMemcpyH2D(
+      /*host_src=*/source, /*size=*/size, queued_buffer->device_memory());
 
   if (!s.ok()) {
     queued_buffer->Done(s);

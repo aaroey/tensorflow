@@ -41,6 +41,10 @@ struct TRTInt8Calibrator : public nvinfer1::IInt8EntropyCalibrator {
       const std::unordered_map<string, std::pair<void*, size_t>>& dev_buffers,
       int batch_size, string engine_name);
 
+  TRTInt8Calibrator(const string& calibration_data);
+
+  ~TRTInt8Calibrator();
+
   int getBatchSize() const override;
 
   bool getBatch(void* bindings[], const char* names[],
@@ -51,11 +55,12 @@ struct TRTInt8Calibrator : public nvinfer1::IInt8EntropyCalibrator {
 
   void setDone();
 
+  // If not null, calibration is skipped.
   const void* readCalibrationCache(std::size_t& length) override;
 
   void writeCalibrationCache(const void* ptr, std::size_t length) override;
 
-  ~TRTInt8Calibrator();
+  const string& getCalibrationTableAsString() { return calibration_table_; }
 
  private:
   const int batch_size_;
@@ -65,6 +70,8 @@ struct TRTInt8Calibrator : public nvinfer1::IInt8EntropyCalibrator {
 
   // Condition variable to implement producer-consumer queue for calibration.
   tensorflow::condition_variable cond_;
+
+  // Is calibration finished?
   bool done_;
 
   // Map to keep tensorrt input buffers and sizes keyed with buffer names.
@@ -72,7 +79,9 @@ struct TRTInt8Calibrator : public nvinfer1::IInt8EntropyCalibrator {
 
   bool calib_running_;
   bool batch_is_set_;
+
   string engine_name_;
+  string calibration_table_;
 };
 
 }  // namespace tensorrt
