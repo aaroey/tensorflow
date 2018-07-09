@@ -33,6 +33,7 @@ tensorflow::Status TRTEngineOpShapeInference(InferenceContext* context) {
   for (int i = 0; i < context->num_outputs(); ++i) {
     context->set_output(i, context->UnknownShape());
   }
+  return Status::OK();
   auto status = context->GetAttr("input_shapes", &shapes);
   // it is ok to not to have shapes
   if (!status.ok()) return Status::OK();
