@@ -230,7 +230,7 @@ void TRTEngineOp::ExecuteCalibration(tensorflow::OpKernelContext* ctx,
       reinterpret_cast<const cudaStream_t*>(ctx->op_device_context()
                                                 ->stream()
                                                 ->implementation()
-                                                ->CudaStreamMemberHack()));
+                                                ->GpuStreamMemberHack()));
   calib_res->calibrator_->setBatch(input_data, *stream);
   VLOG(2) << "Passed calibration data";
   ExecuteNativeSegment(ctx, helper);
@@ -316,6 +316,11 @@ void TRTEngineOp::ComputeAsync(tensorflow::OpKernelContext* ctx,
         ctx->SetStatus(tensorflow::errors::InvalidArgument(
             "INT8 inputs are not supported!"));
         return;
+#if NV_TENSORRT_MAJOR > 3
+      case nvinfer1::DataType::kINT32:
+        buffers[binding_index] = (void*)(input_tensor.flat<int32>().data());
+        break;
+#endif
       default:
         LOG(ERROR) << "Unknown TRT data type: " << int(dtype);
         ctx->SetStatus(tensorflow::errors::InvalidArgument(
@@ -368,6 +373,12 @@ void TRTEngineOp::ComputeAsync(tensorflow::OpKernelContext* ctx,
         ctx->SetStatus(tensorflow::errors::InvalidArgument(
             "INT8 outputs are not supported!"));
         return;
+#if NV_TENSORRT_MAJOR > 3
+      case nvinfer1::DataType::kINT32:
+        buffers[binding_index] =
+            reinterpret_cast<void*>(output_tensor->flat<int32>().data());
+        break;
+#endif
       default:
         LOG(ERROR) << "Unknown TRT data type: " << static_cast<int>(dtype);
         ctx->SetStatus(tensorflow::errors::InvalidArgument(
@@ -380,7 +391,7 @@ void TRTEngineOp::ComputeAsync(tensorflow::OpKernelContext* ctx,
       reinterpret_cast<const cudaStream_t*>(ctx->op_device_context()
                                                 ->stream()
                                                 ->implementation()
-                                                ->CudaStreamMemberHack()));
+                                                ->GpuStreamMemberHack()));
 
   // TODO(jie): trt enqueue does not return error
   auto& trt_execution_context_ptr = engine_ctx_pair.second;

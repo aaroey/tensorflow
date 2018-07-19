@@ -63,6 +63,10 @@ template <>
 constexpr TfLiteType typeToTfLiteType<std::complex<float>>() {
   return kTfLiteComplex64;
 }
+template <>
+constexpr TfLiteType typeToTfLiteType<string>() {
+  return kTfLiteString;
+}
 
 // Forward declare since NNAPIDelegate uses Interpreter.
 class NNAPIDelegate;
@@ -625,7 +629,7 @@ class Interpreter {
   bool tensor_resized_since_op_invoke_ = false;
 
   // Profiler for this interpreter instance.
-  profiling::Profiler* profiler_;
+  profiling::Profiler* profiler_ = nullptr;
 
   // List of active external contexts.
   TfLiteExternalContext* external_contexts_[kTfLiteMaxExternalContexts];

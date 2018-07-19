@@ -102,10 +102,6 @@ class ShapeVerifier : public DfsHloVisitor {
   Status CheckTernaryShape(const HloInstruction* instruction);
   Status CheckVariadicShape(const HloInstruction* instruction);
 
-  // Checks if the given two instructions share the same channel id.
-  Status CheckSameChannel(const HloInstruction* instr1,
-                          const HloInstruction* instr2);
-
  private:
   // Whether the inputs and output of an instruction can contain both F32s and
   // BF16s. Tuples that include both F32s and BF16s are allowed regardless of
@@ -145,6 +141,8 @@ class HloVerifier : public HloPassInterface {
   Status CheckFusionInstruction(HloInstruction* fusion) const;
 
   Status CheckWhileInstruction(HloInstruction* instruction);
+
+  Status CheckConditionalInstruction(HloInstruction* instruction);
 
   // Checks that the non-scalar operand shapes are compatible to the output
   // shape, i.e., that there are no implicit broadcasts of size-one dimensions.
