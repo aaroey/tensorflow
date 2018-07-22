@@ -130,6 +130,17 @@ tensorflow::Status ConvertGraphDefToEngine(
     TrtUniquePtrType<nvinfer1::ICudaEngine>* engine,
     bool* convert_successfully);
 
+class NodeValidator {
+ public:
+  NodeValidator(const grappler::GraphProperties& graph_properties)
+      : graph_properties_(graph_properties) {}
+
+  bool operator()(const tensorflow::Node* node) const;
+
+ private:
+  const grappler::GraphProperties& graph_properties_;
+};
+
 // Helper class for the segmenter to determine whether an input edge to the TRT
 // segment is valid.
 class InputEdgeValidator {

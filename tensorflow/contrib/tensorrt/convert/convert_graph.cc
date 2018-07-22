@@ -81,57 +81,6 @@ std::vector<int> GetLoadedTensorRTVersion() {
 
 namespace {
 
-bool IsTensorRTCandidate(const tensorflow::Node* node) {
-  // LINT.IfChange
-  // TODO(jie): Segmentation shouldn't associated with op name.
-  //            Split it into a registration for each kernel.
-  static const std::set<string> candidate_ops = {
-    "Identity",
-    "Snapshot",
-    "Const",
-    "Conv2D",
-    "MaxPool",
-    "BiasAdd",
-    "Relu",
-    "Add",
-    "Mul",
-    "Sub",
-    "Rsqrt",
-    "Pad",
-    "Mean",
-    "AvgPool",
-    "ConcatV2",
-    "DepthwiseConv2dNative",
-    "FusedBatchNorm",
-    "FusedBatchNormV2",
-    "Div",
-    "RealDiv",
-    "Rsqrt",
-    "Reciprocal",
-    "Exp",
-    "Log",
-    "Sqrt",
-    "Abs",
-    "Neg",
-#if NV_TENSORRT_MAJOR > 3
-    "MatMul",
-    "BatchMatMul",
-    "Softmax",
-    "Minimum",
-    "Maximum",
-    "TopKV2",
-    "Sum",
-    "Prod",
-    "Max",
-    "Min",
-#endif
-    // TODO(ben,jie): ...
-  };
-  // LINT.ThenChange(//tensorflow/contrib/tensorrt/convert/convert_nodes.cc)
-  return (candidate_ops.count(node->type_string()) ||
-          PluginFactoryTensorRT::GetInstance()->IsPlugin(node->type_string()));
-}
-
 tensorflow::Status BuildNodeMap(
     const tensorflow::Graph& graph,
     std::unordered_map<string, tensorflow::Node*>* node_map) {
@@ -755,8 +704,9 @@ tensorflow::Status ConvertAfterShapes(ConversionParams& params) {
   segment_options.minimum_segment_size = params.minimum_segment_size;
   tensorflow::tensorrt::segment::SegmentNodesVector initial_segments;
   TF_RETURN_IF_ERROR(tensorrt::segment::SegmentGraph(
-      &graph, IsTensorRTCandidate, InputEdgeValidator(*params.graph_properties),
-      OutputEdgeValidator(), segment_options, &initial_segments));
+      &graph, NodeValidator(*params.graph_properties),
+      InputEdgeValidator(*params.graph_properties), OutputEdgeValidator(),
+      segment_options, &initial_segments));
   if (initial_segments.size() > 1) {
     VLOG(0) << "MULTIPLE tensorrt candidate conversion: "
             << initial_segments.size();

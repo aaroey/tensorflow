@@ -141,8 +141,6 @@ void GetOutputProperties(const grappler::GraphProperties& graph_properties,
 tensorflow::Status ValidateInputProperties(const PartialTensorShape& shape,
                                            const tensorflow::DataType dtype,
                                            nvinfer1::DataType* trt_dtype) {
-  // TODO(aaroey): some of these checks also apply to IsTensorRTCandidate(), so
-  // put them there instead.
   TF_RETURN_IF_ERROR(ConvertDType(dtype, trt_dtype));
   if (shape.dims() < 0) {
     return tensorflow::errors::InvalidArgument("Input tensor rank is unknown.");
@@ -683,7 +681,6 @@ class Converter {
     const string& op = node_def.op();
     std::vector<TRT_TensorOrWeights> outputs;
     if (PluginFactoryTensorRT::GetInstance()->IsPlugin(op)) {
-      // TODO(aaroey): plugin_converter_ is not set, fix it.
       TF_RETURN_IF_ERROR(plugin_converter_(*this, node_def, inputs, &outputs));
     } else {
       if (!op_registry_.count(op)) {
@@ -2884,6 +2881,60 @@ tensorflow::Status ConvertSegmentToGraphDef(
   *common_scope = local_scope;
   VLOG(0) << "Segment @scope '" << local_scope << "', converted to graph";
   return tensorflow::Status::OK();
+}
+
+bool NodeValidator::operator()(const tensorflow::Node* node) {
+  // LINT.IfChange
+  // TODO(jie): Segmentation shouldn't associated with op name.
+  //            Split it into a registration for each kernel.
+  static const std::set<string> candidate_ops = {
+    "Identity",
+    "Snapshot",
+    "Const",
+    "Conv2D",
+    "MaxPool",
+    "BiasAdd",
+    "Relu",
+    "Add",
+    "Mul",
+    "Sub",
+    "Rsqrt",
+    "Pad",
+    "Mean",
+    "AvgPool",
+    "ConcatV2",
+    "DepthwiseConv2dNative",
+    "FusedBatchNorm",
+    "FusedBatchNormV2",
+    "Div",
+    "RealDiv",
+    "Rsqrt",
+    "Reciprocal",
+    "Exp",
+    "Log",
+    "Sqrt",
+    "Abs",
+    "Neg",
+#if NV_TENSORRT_MAJOR > 3
+    "MatMul",
+    "BatchMatMul",
+    "Softmax",
+    "Minimum",
+    "Maximum",
+    "TopKV2",
+    "Sum",
+    "Prod",
+    "Max",
+    "Min",
+#endif
+    // TODO(ben,jie): ...
+  };
+  // LINT.ThenChange(//tensorflow/contrib/tensorrt/convert/convert_nodes.cc)
+  if (!candidate_ops.count(node->type_string()) &&
+      !PluginFactoryTensorRT::GetInstance()->IsPlugin(node->type_string())) {
+    return false;
+  }
+  return true;
 }
 
 bool InputEdgeValidator::operator()(const tensorflow::Edge* in_edge) const {
