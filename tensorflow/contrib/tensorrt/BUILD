@@ -27,11 +27,28 @@ load(
     "@local_config_tensorrt//:build_defs.bzl",
     "if_tensorrt",
 )
+load("@local_config_cuda//cuda:build_defs.bzl", "cuda_default_copts")
+
+# cp my_trt_path/libnvinfer.a tensorflow/contrib/tensorrt/
+cc_library(
+    name = "nv_infer_static",
+    srcs = ["libnvinfer.a"],
+    copts = cuda_default_copts(),
+    data = ["libnvinfer.a"],
+    includes = ["include"],
+    linkstatic = 1,
+    visibility = ["//visibility:public"],
+    deps = [
+        "@local_config_cuda//cuda",
+        "@local_config_tensorrt//:tensorrt_headers",
+    ],
+)
 
 tf_cuda_cc_test(
     name = "tensorrt_test_cc",
     size = "small",
     srcs = ["tensorrt_test.cc"],
+    linkstatic = True,
     tags = [
         "no_windows",
         "nomac",
@@ -44,7 +61,16 @@ tf_cuda_cc_test(
         "//tensorflow/core:test_main",
     ] + if_tensorrt([
         "@local_config_cuda//cuda:cuda_headers",
-        "@local_config_tensorrt//:nv_infer",
+        # "@local_config_tensorrt//:nv_infer",
+        ":nv_infer_static",
+        ":trt_engine_op_kernel",
+        ":trt_logging",
+        ":trt_resources",
+        ":trt_allocator",
+        ":trt_conversion",
+        ":trt_plugins",
+        "@local_config_tensorrt//:tensorrt_headers",
+        "@flatbuffers",
     ]),
 )
 
@@ -57,7 +83,8 @@ tf_custom_op_library(
         ":trt_shape_function",
         "//tensorflow/core:lib_proto_parsing",
     ] + if_tensorrt([
-        "@local_config_tensorrt//:nv_infer",
+        # "@local_config_tensorrt//:nv_infer",
+        ":nv_infer_static",
     ]),
 )
 
@@ -65,12 +92,14 @@ tf_cuda_library(
     name = "trt_shape_function",
     srcs = ["shape_fn/trt_shfn.cc"],
     hdrs = ["shape_fn/trt_shfn.h"],
+    linkstatic = 1,
     visibility = ["//visibility:public"],
     deps = [
         ":trt_logging",
         ":trt_plugins",
     ] + if_tensorrt([
-        "@local_config_tensorrt//:nv_infer",
+        # "@local_config_tensorrt//:nv_infer",
+        ":nv_infer_static",
     ]) + tf_custom_op_library_additional_deps(),
 )
 
@@ -83,6 +112,7 @@ cc_library(
         "kernels/trt_engine_op.h",
     ],
     copts = tf_copts(),
+    linkstatic = 1,
     visibility = ["//visibility:public"],
     deps = [
         ":trt_allocator",
@@ -96,7 +126,8 @@ cc_library(
         "//tensorflow/core:stream_executor_headers_lib",
         "//tensorflow/core/grappler/costs:graph_properties",
     ] + if_tensorrt([
-        "@local_config_tensorrt//:nv_infer",
+        # "@local_config_tensorrt//:nv_infer",
+        ":nv_infer_static",
     ]) + tf_custom_op_library_additional_deps(),
     # TODO(laigd): fix this by merging header file in cc file.
     alwayslink = 1,  # buildozer: disable=alwayslink-with-hdrs
@@ -112,11 +143,13 @@ tf_cuda_library(
     name = "trt_logging",
     srcs = ["log/trt_logger.cc"],
     hdrs = ["log/trt_logger.h"],
+    linkstatic = 1,
     visibility = ["//visibility:public"],
     deps = [
         "//tensorflow/core:lib_proto_parsing",
     ] + if_tensorrt([
-        "@local_config_tensorrt//:nv_infer",
+        # "@local_config_tensorrt//:nv_infer",
+        ":nv_infer_static",
     ]),
 )
 
@@ -135,7 +168,8 @@ tf_custom_op_py_library(
     dso = [
         ":python/ops/_trt_engine_op.so",
     ] + if_tensorrt([
-        "@local_config_tensorrt//:nv_infer",
+        # "@local_config_tensorrt//:nv_infer",
+        ":nv_infer_static",
     ]),
     kernels = [
         ":trt_engine_op_kernel",
@@ -162,6 +196,7 @@ py_library(
         ":trt_convert_py",
         ":trt_ops_py",
         "//tensorflow/python:errors",
+        "//tensorflow/contrib/lite/python:lite",
     ],
 )
 
@@ -209,6 +244,7 @@ tf_cuda_library(
         "resources/trt_resource_manager.h",
         "resources/trt_resources.h",
     ],
+    linkstatic = 1,
     deps = [
         ":trt_allocator",
         ":trt_logging",
@@ -217,7 +253,8 @@ tf_cuda_library(
         "//tensorflow/core:framework_lite",
         "//tensorflow/core:lib_proto_parsing",
     ] + if_tensorrt([
-        "@local_config_tensorrt//:nv_infer",
+        # "@local_config_tensorrt//:nv_infer",
+        ":nv_infer_static",
     ]),
 )
 
@@ -225,12 +262,14 @@ tf_cuda_library(
     name = "trt_allocator",
     srcs = ["resources/trt_allocator.cc"],
     hdrs = ["resources/trt_allocator.h"],
+    linkstatic = 1,
     deps = [
         "//tensorflow/core:framework_headers_lib",
         "//tensorflow/core:framework_lite",
         "//tensorflow/core:lib_proto_parsing",
     ] + if_tensorrt([
-        "@local_config_tensorrt//:nv_infer",
+        # "@local_config_tensorrt//:nv_infer",
+        ":nv_infer_static",
     ]),
 )
 
@@ -262,6 +301,7 @@ tf_cuda_library(
         "convert/convert_nodes.h",
         "convert/trt_optimization_pass.h",
     ],
+    linkstatic = 1,
     deps = [
         ":segment",
         ":trt_allocator",
@@ -284,8 +324,10 @@ tf_cuda_library(
         "//tensorflow/core/grappler/clusters:virtual_cluster",
         "//tensorflow/core/grappler/costs:graph_properties",
         "//tensorflow/core/grappler/optimizers:meta_optimizer",
+        "@flatbuffers",
     ] + if_tensorrt([
-        "@local_config_tensorrt//:nv_infer",
+        # "@local_config_tensorrt//:nv_infer",
+        ":nv_infer_static",
     ]) + tf_custom_op_library_additional_deps(),
 )
 
@@ -340,11 +382,13 @@ tf_cuda_library(
         "plugin/trt_plugin_factory.h",
         "plugin/trt_plugin_utils.h",
     ],
+    linkstatic = 1,
     deps = [
         "//tensorflow/core:framework_lite",
         "//tensorflow/core:lib_proto_parsing",
     ] + if_tensorrt([
-        "@local_config_tensorrt//:nv_infer",
+        # "@local_config_tensorrt//:nv_infer",
+        ":nv_infer_static",
     ]),
 )
 
@@ -364,7 +408,8 @@ tf_cuda_cc_test(
         "//tensorflow/core:test_main",
     ] + if_tensorrt([
         "@local_config_cuda//cuda:cuda_headers",
-        "@local_config_tensorrt//:nv_infer",
+        # "@local_config_tensorrt//:nv_infer",
+        ":nv_infer_static",
     ]),
 )
 

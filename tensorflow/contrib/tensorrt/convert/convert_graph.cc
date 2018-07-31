@@ -53,6 +53,7 @@ limitations under the License.
 #include "tensorflow/core/protobuf/device_properties.pb.h"  // NOLINT
 #include "tensorflow/core/protobuf/rewriter_config.pb.h"  // NOLINT
 #include "tensorflow/core/util/device_name_utils.h"
+#include "flatbuffers/flatbuffers.h"
 
 #if GOOGLE_CUDA
 #if GOOGLE_TENSORRT
@@ -63,6 +64,8 @@ namespace tensorrt {
 namespace convert {
 using ::tensorflow::strings::StrAppend;
 using ::tensorflow::strings::StrCat;
+
+static flatbuffers::Offset<void> dumb;
 
 // Returns compiled TRT version information {Maj, Min, Patch}
 std::vector<int> GetLinkedTensorRTVersion() {

@@ -23,6 +23,7 @@ limitations under the License.
 #include "cuda/include/cuda.h"
 #include "cuda/include/cuda_runtime_api.h"
 #include "tensorrt/include/NvInfer.h"
+#include "flatbuffers/flatbuffers.h"
 
 namespace tensorflow {
 namespace {
@@ -132,6 +133,7 @@ void Execute(nvinfer1::IExecutionContext* context, const float* input,
 }
 
 TEST(TensorrtTest, BasicFunctions) {
+  flatbuffers::Offset<void> dumb;
   // Handle the case where the test is run on machine with no gpu available.
   if (CHECK_NOTNULL(GPUMachineManager())->VisibleDeviceCount() <= 0) {
     LOG(WARNING) << "No gpu device available, probably not being run on a gpu "

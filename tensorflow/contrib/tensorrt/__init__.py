@@ -20,6 +20,7 @@ from __future__ import print_function
 
 from tensorflow.python.framework import errors
 
+from tensorflow.contrib.lite.python.convert import toco_convert
 # pylint: disable=unused-import,wildcard-import,g-import-not-at-top
 try:
   from tensorflow.contrib.tensorrt.python import *
