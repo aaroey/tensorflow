@@ -74,6 +74,7 @@ class Model(Network):
   class MyModel(tf.keras.Model):
 
     def __init__(self):
+      super(MyModel, self).__init__()
       self.dense1 = tf.keras.layers.Dense(4, activation=tf.nn.relu)
       self.dense2 = tf.keras.layers.Dense(5, activation=tf.nn.softmax)
 
@@ -94,6 +95,7 @@ class Model(Network):
   class MyModel(tf.keras.Model):
 
     def __init__(self):
+      super(MyModel, self).__init__()
       self.dense1 = tf.keras.layers.Dense(4, activation=tf.nn.relu)
       self.dense2 = tf.keras.layers.Dense(5, activation=tf.nn.softmax)
       self.dropout = tf.keras.layers.Dropout(0.5)
@@ -151,9 +153,9 @@ class Model(Network):
 
     Arguments:
         optimizer: String (name of optimizer) or optimizer instance.
-            See [optimizers](/optimizers).
+            See [optimizers](/api_docs/python/tf/keras/optimizers).
         loss: String (name of objective function) or objective function.
-            See [losses](/losses).
+            See [losses](/api_docs/python/tf/losses).
             If the model has multiple outputs, you can use a different loss
             on each output by passing a dictionary or a list of losses.
             The loss value that will be minimized by the model
@@ -201,16 +203,17 @@ class Model(Network):
     # DistributionStrategy.
     if distribute and not isinstance(
         optimizer, (tf_optimizer_module.Optimizer, optimizers.TFOptimizer)):
-      raise ValueError('Only TF native optimizers are supported with '
-                       'DistributionStrategy.')
+      raise NotImplementedError('Only TF native optimizers are supported with '
+                                'DistributionStrategy.')
     if distribute and context.executing_eagerly():
-      raise ValueError('DistributionStrategy is not supported in Eager mode.')
+      raise NotImplementedError('DistributionStrategy is not supported in '
+                                'Eager mode.')
     if distribute and sample_weight_mode:
-      raise ValueError('sample_weight_mode is not supported with '
-                       'DistributionStrategy.')
+      raise NotImplementedError('sample_weight_mode is not supported with '
+                                'DistributionStrategy.')
     if distribute and weighted_metrics:
-      raise ValueError('weighted_metrics is not supported with '
-                       'DistributionStrategy.')
+      raise NotImplementedError('weighted_metrics is not supported with '
+                                'DistributionStrategy.')
     if distribute and target_tensors:
       raise ValueError('target_tensors is not supported with '
                        'DistributionStrategy.')
@@ -245,6 +248,12 @@ class Model(Network):
       with self._distribution_strategy.scope():
         first_replicated_model = self._distribution_strategy.unwrap(
             self._grouped_model)[0]
+        # If the specified metrics in `compile` are stateful, raise an error
+        # since we currently don't support stateful metrics.
+        if first_replicated_model.stateful_metric_names:
+          raise NotImplementedError('Stateful metrics are not supported with '
+                                    'DistributionStrategy.')
+
       # We initialize the callback model with the first replicated model.
       self._replicated_model = DistributedCallbackModel(first_replicated_model)
       self._replicated_model.set_original_model(self)
@@ -298,9 +307,7 @@ class Model(Network):
 
     # Prepare output masks.
     if not context.executing_eagerly():
-      masks = self.compute_mask(self.inputs, mask=None)
-      if masks is None:
-        masks = [None for _ in self.outputs]
+      masks = [getattr(x, '_keras_mask', None) for x in self.outputs]
       if not isinstance(masks, list):
         masks = [masks]
 
@@ -667,11 +674,11 @@ class Model(Network):
       RuntimeError: If the model was never compiled.
     """
     if sample_weight is not None and sample_weight.all():
-      raise ValueError('sample_weight is currently not supported when using '
-                       'DistributionStrategy.')
+      raise NotImplementedError('sample_weight is currently not supported when '
+                                'using DistributionStrategy.')
     if class_weight:
-      raise ValueError('class_weight is currently not supported when using '
-                       'DistributionStrategy.')
+      raise NotImplementedError('class_weight is currently not supported when '
+                                'using DistributionStrategy.')
 
     # TODO(anjalisridhar): Can we use the iterator and getnext op cache?
     # We require users to pass Datasets since we distribute the dataset across
@@ -1062,22 +1069,13 @@ class Model(Network):
           'in their call() signatures do not yet support shape inference. File '
           'a feature request if this limitation bothers you.')
     if self.__class__.__name__ == 'Sequential':
-      # Note: we can't test whether the model is `Sequential` via `isinstance`
-      # since `Sequential` depends on `Model`.
-      if isinstance(inputs, list):
-        assert len(inputs) == 1
-        inputs = inputs[0]
-
       if tensor_util.is_tensor(inputs):
-        if context.executing_eagerly():
-          input_shape = (None,) + tuple(inputs.get_shape().as_list()[1:])
-          self.build(input_shape=input_shape)
-        else:
-          self.symbolic_set_inputs(inputs)
+        input_shape = (None,) + tuple(inputs.get_shape().as_list()[1:])
+        self.build(input_shape=input_shape)
       else:
         input_shape = (None,) + inputs.shape[1:]
         self.build(input_shape=input_shape)
-    elif context.executing_eagerly():
+    if context.executing_eagerly():
       self._eager_set_inputs(inputs)
     else:
       self._symbolic_set_inputs(inputs, training=training)
@@ -1268,7 +1266,7 @@ class Model(Network):
             0 = silent, 1 = progress bar, 2 = one line per epoch.
         callbacks: List of `keras.callbacks.Callback` instances.
             List of callbacks to apply during training.
-            See [callbacks](/callbacks).
+            See [callbacks](/api_docs/python/tf/keras/callbacks).
         validation_split: Float between 0 and 1.
             Fraction of the training data to be used as validation data.
             The model will set apart this fraction of the training data,
@@ -1655,8 +1653,8 @@ class Model(Network):
       ValueError: In case of invalid user-provided arguments.
     """
     if self._distribution_strategy:
-      raise ValueError('`train_on_batch` is not supported for models '
-                       'compiled with DistributionStrategy.')
+      raise NotImplementedError('`train_on_batch` is not supported for models '
+                                'compiled with DistributionStrategy.')
     # Validate and standardize user data.
     x, y, sample_weights = self._standardize_user_data(
         x, y, sample_weight=sample_weight, class_weight=class_weight)
@@ -1714,8 +1712,8 @@ class Model(Network):
         ValueError: In case of invalid user-provided arguments.
     """
     if self._distribution_strategy:
-      raise ValueError('`test_on_batch` is not supported for models '
-                       'compiled with DistributionStrategy.')
+      raise NotImplementedError('`test_on_batch` is not supported for models '
+                                'compiled with DistributionStrategy.')
     # Validate and standardize user data.
     x, y, sample_weights = self._standardize_user_data(
         x, y, sample_weight=sample_weight)
@@ -1754,8 +1752,8 @@ class Model(Network):
           expectations of the model.
     """
     if self._distribution_strategy:
-      raise ValueError('`predict_on_batch` is not supported for models '
-                       'compiled with DistributionStrategy.')
+      raise NotImplementedError('`predict_on_batch` is not supported for '
+                                'models compiled with DistributionStrategy.')
     # Validate and standardize user data.
     inputs, _, _ = self._standardize_user_data(x)
     if context.executing_eagerly():
