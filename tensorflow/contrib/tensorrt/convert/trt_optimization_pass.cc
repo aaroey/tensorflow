@@ -17,6 +17,7 @@ limitations under the License.
 #include "tensorflow/core/grappler/clusters/cluster.h"
 #include "tensorflow/core/grappler/grappler_item.h"
 #include "tensorflow/core/grappler/optimizers/custom_graph_optimizer_registry.h"
+#include "tensorflow/core/grappler/utils/functions.h"
 #include "tensorflow/core/lib/strings/numbers.h"
 #include "tensorflow/core/lib/strings/str_util.h"
 #include "tensorflow/core/lib/strings/strcat.h"
@@ -194,12 +195,21 @@ tensorflow::Status TRTOptimizationPass::Optimize(
   // optimization passes on function objects as well, we should not modify
   // generated funcdefs! This is fragile but we don't have any other option
   // until framework fixes it.
-  if (item.id != "tf_graph") {
-    LOG(WARNING) << name_
-                 << " is probably called on funcdef! This optimizer must *NOT* "
-                    "be called on function objects.";
-    *optimized_graph = item.graph;
-    return tensorflow::Status::OK();
+  using tensorflow::grappler::GrapplerFunctionItem;
+  const GrapplerFunctionItem* func_item =
+      dynamic_cast<const GrapplerFunctionItem*>(&item);
+          LOG(ERROR) << "========> " << item.id;
+  if (func_item) {
+    auto itr = func_item->func_attr().find("_blacklisted_optimizers");
+    if (itr != func_item->func_attr().end()) {
+      for (const string& blacklisted : itr->second.list().s()) {
+        if (blacklisted == "TRTOptimizationPass") {
+          LOG(WARNING) << "TRTOptimizationPass blacklisted by " << item.id;
+          *optimized_graph = item.graph;
+          return tensorflow::Status::OK();
+        }
+      }
+    }
   }
   if (VLOG_IS_ON(1)) {
     VLOG(2) << CurrentStackTrace();

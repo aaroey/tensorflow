@@ -759,6 +759,9 @@ tensorflow::Status RegisterSegmentFunctionToFunctionLibrary(
   auto native_segment = fdeflib.add_function();
   TF_RETURN_IF_ERROR(tensorflow::GraphToFunctionDef(
       sgraph, StrCat(name, "_native_segment"), native_segment));
+  (*native_segment->mutable_attr())["_blacklisted_optimizers"]
+      .mutable_list()
+      ->add_s("TRTOptimizationPass");
   if (VLOG_IS_ON(7)) {
     VLOG(7) << name << " Function_Def ";
     VLOG(7) << native_segment->DebugString();

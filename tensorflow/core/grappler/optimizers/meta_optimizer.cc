@@ -226,6 +226,8 @@ Status MetaOptimizer::OptimizeGraph(Cluster* cluster, const GrapplerItem& item,
 
   // Invariant: optimized_graph contains the most recently optimized version of
   // the graph.
+  /////////////// not able to convert it to GrapplerFunctionItem (base class to
+  //derived class.
   GrapplerItem optimized_item = item;
   optimized_graph->Swap(&optimized_item.graph);
 
