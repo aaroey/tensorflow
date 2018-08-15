@@ -14,6 +14,7 @@ limitations under the License.
 
 #include "tensorflow/contrib/tensorrt/convert/trt_optimization_pass.h"
 #include "tensorflow/contrib/tensorrt/convert/convert_graph.h"
+#include "tensorflow/core/graph/tensor_id.h"
 #include "tensorflow/core/grappler/clusters/cluster.h"
 #include "tensorflow/core/grappler/grappler_item.h"
 #include "tensorflow/core/grappler/optimizers/custom_graph_optimizer_registry.h"
@@ -238,19 +239,8 @@ tensorflow::Status TRTOptimizationPass::Optimize(
 
   std::vector<string> nodes_to_preserve;
   for (const auto& n : item.NodesToPreserve()) {
-    auto tokens = str_util::Split(n, ":");
-    string s = tokens.at(0);
-    for (int i = 1; i < tokens.size() - 1; ++i) {
-      StrAppend(&s, ":", tokens.at(i));
-    }
-    int dumm_port = -1;
-    // If the last token is not an integer, it must be part of the name.
-    // Otherwise it is port number.
-    if (tokens.size() > 1 &&
-        !strings::safe_strto32(tokens.back(), &dumm_port)) {
-      StrAppend(&s, ":", tokens.back());
-    }
-    nodes_to_preserve.push_back(s);
+    TensorId id = ParseTensorName(n);
+    nodes_to_preserve.push_back(string(id.first));
   }
   cp.input_graph_def = &item.graph;
   cp.output_names = &nodes_to_preserve;

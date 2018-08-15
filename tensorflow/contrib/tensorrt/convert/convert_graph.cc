@@ -703,17 +703,11 @@ tensorflow::Status RegisterSegmentFunctionToFunctionLibrary(
                            .Finalize(&nd));
     tensorflow::Status s;
     auto node_arg = sgraph.AddNode(nd, &s);
-    if (!s.ok()) {
-      LOG(ERROR) << "Couldn't add _Arg node for " << name;
-    }
+    TF_RETURN_IF_ERROR(s);
     for (auto edge : node->out_edges()) {
+      VLOG(1) << "Updating funcdef input edge from " << node_arg->name() << ":0"
+              << " -> " << edge->dst()->name() << ":" << edge->dst_input();
       sgraph.AddEdge(node_arg, 0, edge->dst(), edge->dst_input());
-      VLOG(1) << "Updating funcdef input " << node_arg->name() << ":" << 0
-              << " - > " << edge->dst()->name() << ":" << edge->dst_input();
-      if (!s.ok()) {
-        LOG(ERROR) << "Failed to update edge from " << node_arg->name()
-                   << " to " << edge->dst()->name() << ":" << edge->dst_input();
-      }
     }
     sgraph.RemoveNode(node);
   }
@@ -741,18 +735,10 @@ tensorflow::Status RegisterSegmentFunctionToFunctionLibrary(
     }
     tensorflow::Status s;
     auto node_ret = sgraph.AddNode(nd, &s);
-    if (!s.ok()) {
-      LOG(ERROR) << "Couldn't add _Ret node for " << name;
-    }
-    VLOG(1) << "Update edge from " << edge->src()->name() << ":"
-            << edge->src_output() << " - > " << node_ret->name() << ":" << 0;
+    TF_RETURN_IF_ERROR(s);
+    VLOG(1) << "Updating funcdef output edge from " << edge->src()->name()
+            << ":" << edge->src_output() << " -> " << node_ret->name() << ":0";
     sgraph.AddEdge(edge->src(), edge->src_output(), node_ret, 0);
-    s = sgraph.UpdateEdge(edge->src(), edge->src_output(), node_ret, 0);
-    if (!s.ok()) {
-      LOG(ERROR) << "Failed to update edge from " << edge->src()->name() << ":"
-                 << edge->src_output() << " - > " << node_ret->name() << ":"
-                 << 0;
-    }
     sgraph.RemoveNode(node);
   }
   tensorflow::FunctionDefLibrary fdeflib;

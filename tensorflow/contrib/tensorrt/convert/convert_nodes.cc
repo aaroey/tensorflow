@@ -2690,7 +2690,7 @@ tensorflow::Status ConvertGraphDefToEngine(
   std::vector<std::pair<string, string>> output_tensors;
   // Graph nodes are already topologically sorted during construction
   for (const auto& node_def : gdef.node()) {
-    string node_name = node_def.name();
+    const string& node_name = node_def.name();
     VLOG(2) << "Converting op name=" << node_name << ", op=" << node_def.op();
     if (tensorflow::str_util::StartsWith(node_name, kInputPHName) &&
         (node_def.op() == "Placeholder")) {
@@ -2734,10 +2734,10 @@ tensorflow::Status ConvertGraphDefToEngine(
             "Failed to create Input layer tensor ", node_name,
             " rank=", shape.dims() - 1);
       }
-      VLOG(1) << "Input tensor name :" << node_name;
+      VLOG(1) << "Input tensor name: " << node_name;
       if (!converter.insert_input_tensor(node_name, input_tensor)) {
         return tensorflow::errors::AlreadyExists(
-            "Output tensor already exists for op: " + node_name);
+            "Input tensor already exists for op: " + node_name);
       }
     } else if (tensorflow::str_util::StartsWith(node_name, kOutputPHName) &&
                (node_def.op() == "Identity")) {
