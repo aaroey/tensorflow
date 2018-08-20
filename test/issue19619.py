@@ -48,6 +48,19 @@ def main():
   graph_def = tf.GraphDef()
   with tf.gfile.GFile('/tmp/lambdatfpy/trt-ssd-minimal-example/ssd-tensorflow.pb', 'rb') as f:
     graph_def.ParseFromString(f.read())
+  print('original nodes: %d'%len(graph_def.node))
+
+  converted_graph_def = trt.create_inference_graph(
+        input_graph_def=graph_def,
+        outputs=INPUT_TENSORS+OUTPUT_TENSORS,
+        max_batch_size=3,
+        max_workspace_size_bytes=1<<25,
+        precision_mode='FP32',
+        minimum_segment_size=10,
+        is_dynamic_op=False,
+        maximum_cached_engines=1)
+  print('converted nodes: %d'%len(converted_graph_def.node))
+  return
 
   with tf.Graph().as_default():
     tf.import_graph_def(graph_def, name='')
