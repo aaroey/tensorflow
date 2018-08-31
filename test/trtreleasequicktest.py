@@ -1,3 +1,5 @@
+import numpy as np
+
 import tensorflow as tf
 from tensorflow.contrib import tensorrt as trt
 from tensorflow.python.framework import importer
