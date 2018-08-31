@@ -5,11 +5,12 @@ from tensorflow.contrib import tensorrt as trt
 from tensorflow.python.framework import importer
 from tensorflow.python.ops import gen_nn_ops
 
+INPUT_NAME = 'input'
+OUTPUT_NAME = 'output'
+INPUT_DIMS = [1, 24, 24, 2]
+
 
 def simple_graphdef(with_gpu=True, dtype=tf.float32):
-  INPUT_NAME = 'input'
-  OUTPUT_NAME = 'output'
-  INPUT_DIMS = [100, 24, 24, 2]
 
   def _build_model(inp):
     conv_filter = tf.constant(
@@ -47,36 +48,48 @@ def simple_trt_graphdef(with_gpu=True, dtype=tf.float32):
   gdef = simple_graphdef(with_gpu, dtype)
   trt_gdef = trt.create_inference_graph(
       gdef,
-      outputs=['output'],
-      max_batch_size=16,
+      outputs=[OUTPUT_NAME],
+      max_batch_size=INPUT_DIMS[0],
       max_workspace_size_bytes=1 << 30,
       minimum_segment_size=2,
       precision_mode='FP32')
   return trt_gdef
 
 
-print('linked_tensorrt_version: %s' % str(
+def run_gdef(gdef):
+  vgd_config = tf.GPUOptions.Experimental(virtual_devices=[
+      tf.GPUOptions.Experimental.VirtualDevices(memory_limit_mb=[2048])
+  ])
+  gpu_options = tf.GPUOptions(
+      allow_growth=False, visible_device_list='0', experimental=vgd_config)
+  config = tf.ConfigProto(gpu_options=gpu_options)
+
+  g = tf.Graph()
+  with g.as_default():
+    importer.import_graph_def(gdef, name='')
+    with tf.Session(config=config) as sess:
+      return sess.run(
+          OUTPUT_NAME + ':0',
+          feed_dict={INPUT_NAME + ':0': np.random.uniform(size=INPUT_DIMS)})
+
+
+def myprint(msg):
+  print('-' * 50 + msg)
+
+
+gdef = simple_graphdef()
+result = run_gdef(gdef)
+
+trt_gdef = simple_trt_graphdef()
+trt_result = run_gdef(trt_gdef)
+
+myprint('max abs result: %s' % str(np.max(np.abs(result))))
+myprint('max abs trt_result: %s' % str(np.max(np.abs(trt_result))))
+abs_diff = np.abs((result - trt_result))
+myprint('max abs diff: %s' % str(np.max(abs_diff)))
+myprint('mean abs diff: %s' % str(np.mean(abs_diff)))
+
+myprint('linked_tensorrt_version: %s' % str(
     trt.trt_convert.get_linked_tensorrt_version()))
-print('loaded_tensorrt_version: %s' % str(
+myprint('loaded_tensorrt_version: %s' % str(
     trt.trt_convert.get_loaded_tensorrt_version()))
-
-vgd_config = tf.GPUOptions.Experimental(virtual_devices=[
-    tf.GPUOptions.Experimental.VirtualDevices(memory_limit_mb=[256])
-])
-gpu_options = tf.GPUOptions(
-    allow_growth=False, visible_device_list='0', experimental=vgd_config)
-config = tf.ConfigProto(gpu_options=gpu_options)
-
-g = tf.Graph()
-gdef = simple_trt_graphdef()
-with g.as_default():
-  importer.import_graph_def(gdef, name='')
-  with tf.Session(config=config) as sess:
-    print(
-        sess.run(
-            'output',
-            feed_dict={'input': np.random.uniform(size=[100, 24, 24, 2])}))
-
-
-
-
