@@ -140,16 +140,17 @@ def main(argv):
   run_options.output_partition_graphs = True
 
   # Run the graph with the configured options.
-  with tf.Session(config=config) as sess:
-    loader.load(sess, [tag_constants.SERVING], saved_model_dir)
-    result = sess.run(['softmax_tensor:0'],
-                      feed_dict={
-                          'Placeholder:0':
-                              np.random.random_sample([batch_size, 784]),
-                      },
-                      options=run_options,
-                      run_metadata=run_metadata)
-    print(result)
+  with tf.Graph().as_default():
+    with tf.Session(config=config) as sess:
+      loader.load(sess, [tag_constants.SERVING], saved_model_dir)
+      result = sess.run(['softmax_tensor:0'],
+                        feed_dict={
+                            'Placeholder:0':
+                                np.random.random_sample([batch_size, 784]),
+                        },
+                        options=run_options,
+                        run_metadata=run_metadata)
+      print(result)
 
   for gd in run_metadata.partition_graphs:
     device = gd.node[0].device.replace('/', '_').replace(':', '_')
