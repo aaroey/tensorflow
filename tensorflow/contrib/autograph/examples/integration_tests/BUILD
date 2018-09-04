@@ -22,7 +22,7 @@ py_test(
         "errors_test.py",
     ],
     srcs_version = "PY2AND3",
-    visibility = ["//visibility:public"],
+    tags = ["no_windows"],
     deps = [
         "//tensorflow:tensorflow_py",
     ],

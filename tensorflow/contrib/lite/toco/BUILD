@@ -11,6 +11,7 @@ load(
     "//tensorflow:tensorflow.bzl",
     "tf_cc_binary",
     "tf_cc_test",
+    "tf_copts",
 )
 
 tf_proto_library_cc(
@@ -212,7 +213,6 @@ cc_library(
         "graph_transformations/quantization_util.cc",
         "graph_transformations/quantization_util.h",
         "graph_transformations/quantize.cc",
-        "graph_transformations/quantize_weights.cc",
         "graph_transformations/read_array_minmax_and_narrow_range_from_fake_quant.cc",
         "graph_transformations/remove_final_dequantize_op.cc",
         "graph_transformations/remove_tensorflow_assert.cc",
@@ -241,9 +241,11 @@ cc_library(
         "graph_transformations/resolve_constant_random_uniform.cc",
         "graph_transformations/resolve_constant_range.cc",
         "graph_transformations/resolve_constant_reshape.cc",
+        "graph_transformations/resolve_constant_select.cc",
         "graph_transformations/resolve_constant_shape_or_rank.cc",
         "graph_transformations/resolve_constant_slice.cc",
         "graph_transformations/resolve_constant_strided_slice.cc",
+        "graph_transformations/resolve_constant_tile.cc",
         "graph_transformations/resolve_constant_transpose.cc",
         "graph_transformations/resolve_constant_unary.cc",
         "graph_transformations/resolve_fake_quant_args_from_vars.cc",
@@ -305,7 +307,7 @@ cc_library(
         "tensorflow_util.h",
         "toco_tooling.h",
     ],
-    copts = select({
+    copts = tf_copts() + select({
         "//tensorflow:darwin": ["-DTOCO_SUPPORT_PORTABLE_PROTOS=0"],
         "//conditions:default": [],
     }),
@@ -360,6 +362,7 @@ cc_library(
         "dump_graphviz.h",
         "tooling_util.h",
     ],
+    copts = tf_copts(),
     visibility = ["//visibility:public"],
     deps = [
         ":model",

@@ -664,13 +664,25 @@ void ConvertAddNOperator(const Model& model, const AddNOperator& src_op,
 
 void ConvertMulOperator(const Model& model, const MulOperator& src_op,
                         GraphDef* tensorflow_graph) {
-  tensorflow::NodeDef* add_op = tensorflow_graph->add_node();
-  add_op->set_op("Mul");
-  add_op->set_name(src_op.outputs[0]);
+  tensorflow::NodeDef* mul_op = tensorflow_graph->add_node();
+  mul_op->set_op("Mul");
+  mul_op->set_name(src_op.outputs[0]);
   CHECK_EQ(src_op.inputs.size(), 2);
-  *add_op->add_input() = src_op.inputs[0];
-  *add_op->add_input() = src_op.inputs[1];
-  (*add_op->mutable_attr())["T"].set_type(
+  *mul_op->add_input() = src_op.inputs[0];
+  *mul_op->add_input() = src_op.inputs[1];
+  (*mul_op->mutable_attr())["T"].set_type(
+      GetTensorFlowDataType(model, src_op.outputs[0]));
+}
+
+void ConvertDivOperator(const Model& model, const DivOperator& src_op,
+                        GraphDef* tensorflow_graph) {
+  tensorflow::NodeDef* div_op = tensorflow_graph->add_node();
+  div_op->set_op("Div");
+  div_op->set_name(src_op.outputs[0]);
+  CHECK_EQ(src_op.inputs.size(), 2);
+  *div_op->add_input() = src_op.inputs[0];
+  *div_op->add_input() = src_op.inputs[1];
+  (*div_op->mutable_attr())["T"].set_type(
       GetTensorFlowDataType(model, src_op.outputs[0]));
 }
 
@@ -1689,9 +1701,11 @@ void ConvertReduceOperator(const Model& model, const T& src_op,
   *new_op->add_input() = src_op.inputs[0];
   *new_op->add_input() = src_op.inputs[1];
 
-  const tensorflow::DataType params_type =
-      GetTensorFlowDataType(model, src_op.inputs[0]);
-  (*new_op->mutable_attr())["T"].set_type(params_type);
+  if (src_op.type != OperatorType::kAny) {
+    const tensorflow::DataType params_type =
+        GetTensorFlowDataType(model, src_op.inputs[0]);
+    (*new_op->mutable_attr())["T"].set_type(params_type);
+  }
   const tensorflow::DataType indices_type =
       GetTensorFlowDataType(model, src_op.inputs[1]);
   (*new_op->mutable_attr())["Tidx"].set_type(indices_type);
@@ -1888,21 +1902,6 @@ void ConvertPowOperator(const Model& model, const PowOperator& src_op,
   (*pow_op->mutable_attr())["T"].set_type(data_type);
 }
 
-void ConvertAnyOperator(const Model& model, const AnyOperator& src_op,
-                        GraphDef* tensorflow_graph) {
-  tensorflow::NodeDef* any_op = tensorflow_graph->add_node();
-  any_op->set_op("Any");
-  any_op->set_name(src_op.outputs[0]);
-  CHECK_EQ(src_op.inputs.size(), 2);
-  for (int i = 0; i < 2; ++i) {
-    *any_op->add_input() = src_op.inputs[i];
-  }
-  const tensorflow::DataType data_type =
-      GetTensorFlowDataType(model, src_op.inputs[1]);
-  (*any_op->mutable_attr())["Tidx"].set_type(data_type);
-  (*any_op->mutable_attr())["keep_dims"].set_b(src_op.keep_dims);
-}
-
 void ConvertLogicalAndOperator(const Model& model,
                                const LogicalAndOperator& src_op,
                                GraphDef* tensorflow_graph) {
@@ -1940,6 +1939,35 @@ void ConvertLogicalOrOperator(const Model& model,
   (*logical_or_op->mutable_attr())["T"].set_type(data_type);
 }
 
+void ConvertCTCBeamSearchDecoderOperator(
+    const Model& model, const CTCBeamSearchDecoderOperator& src_op,
+    const char* op_name, GraphDef* tensorflow_graph) {
+  auto* op = tensorflow_graph->add_node();
+  op->set_op(op_name);
+  op->set_name(src_op.outputs[0]);
+  CHECK_EQ(src_op.inputs.size(), 2);
+  for (int i = 0; i < 2; ++i) {
+    *op->add_input() = src_op.inputs[i];
+  }
+  (*op->mutable_attr())["beam_width"].set_i(src_op.beam_width);
+  (*op->mutable_attr())["top_paths"].set_i(src_op.top_paths);
+  (*op->mutable_attr())["merge_repeated"].set_b(src_op.merge_repeated);
+}
+
+void ConvertUnpackOperator(const Model& model, const UnpackOperator& src_op,
+                           const char* op_name, GraphDef* tensorflow_graph) {
+  tensorflow::NodeDef* unpack_op = tensorflow_graph->add_node();
+  unpack_op->set_op(op_name);
+  unpack_op->set_name(src_op.outputs[0]);
+  CHECK_EQ(src_op.inputs.size(), 2);
+  *unpack_op->add_input() = src_op.inputs[0];
+  const tensorflow::DataType data_type =
+      GetTensorFlowDataType(model, src_op.inputs[0]);
+  (*unpack_op->mutable_attr())["T"].set_type(data_type);
+  (*unpack_op->mutable_attr())["num"].set_i(src_op.num);
+  (*unpack_op->mutable_attr())["axis"].set_i(src_op.axis);
+}
+
 void ConvertOperator(const Model& model, const Operator& src_op,
                      GraphDef* tensorflow_graph) {
   if (src_op.fused_activation_function != FusedActivationFunctionType::kNone) {
@@ -1974,6 +2002,9 @@ void ConvertOperator(const Model& model, const Operator& src_op,
                         tensorflow_graph);
   } else if (src_op.type == OperatorType::kMul) {
     ConvertMulOperator(model, static_cast<const MulOperator&>(src_op),
+                       tensorflow_graph);
+  } else if (src_op.type == OperatorType::kDiv) {
+    ConvertDivOperator(model, static_cast<const DivOperator&>(src_op),
                        tensorflow_graph);
   } else if (src_op.type == OperatorType::kRelu) {
     ConvertReluOperator(model, static_cast<const ReluOperator&>(src_op),
@@ -2088,7 +2119,7 @@ void ConvertOperator(const Model& model, const Operator& src_op,
                           tensorflow_graph, "Prod");
   } else if (src_op.type == OperatorType::kReduceMin) {
     ConvertReduceOperator(model,
-                          static_cast<const TensorFlowMaxOperator&>(src_op),
+                          static_cast<const TensorFlowMinOperator&>(src_op),
                           tensorflow_graph, "Min");
   } else if (src_op.type == OperatorType::kReduceMax) {
     ConvertReduceOperator(model,
@@ -2177,8 +2208,9 @@ void ConvertOperator(const Model& model, const Operator& src_op,
     ConvertPowOperator(model, static_cast<const PowOperator&>(src_op), "Pow",
                        tensorflow_graph);
   } else if (src_op.type == OperatorType::kAny) {
-    ConvertAnyOperator(model, static_cast<const AnyOperator&>(src_op),
-                       tensorflow_graph);
+    ConvertReduceOperator(model,
+                          static_cast<const TensorFlowAnyOperator&>(src_op),
+                          tensorflow_graph, "Any");
   } else if (src_op.type == OperatorType::kLogicalAnd) {
     ConvertLogicalAndOperator(model,
                               static_cast<const LogicalAndOperator&>(src_op),
@@ -2194,6 +2226,13 @@ void ConvertOperator(const Model& model, const Operator& src_op,
     ConvertLogicalOrOperator(model,
                              static_cast<const LogicalOrOperator&>(src_op),
                              "LogicalOr", tensorflow_graph);
+  } else if (src_op.type == OperatorType::kCTCBeamSearchDecoder) {
+    ConvertCTCBeamSearchDecoderOperator(
+        model, static_cast<const CTCBeamSearchDecoderOperator&>(src_op),
+        "CTCBeamSearchDecoder", tensorflow_graph);
+  } else if (src_op.type == OperatorType::kUnpack) {
+    ConvertUnpackOperator(model, static_cast<const UnpackOperator&>(src_op),
+                          "Unpack", tensorflow_graph);
   } else {
     LOG(FATAL) << "Unhandled operator type " << OperatorTypeName(src_op.type);
   }

@@ -23,7 +23,6 @@ from __future__ import print_function
 
 import collections
 import hashlib
-import sys
 
 from tensorflow.core.framework import attr_value_pb2
 from tensorflow.core.framework import function_pb2
@@ -34,16 +33,12 @@ from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import graph_to_function_def
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import cond_v2_impl
 from tensorflow.python.ops import resource_variable_ops
 from tensorflow.python.ops import variable_scope as vs
 from tensorflow.python.util import compat
 from tensorflow.python.util import function_utils
 from tensorflow.python.util import tf_contextlib
 from tensorflow.python.util import tf_inspect
-
-# This is to avoid a circular dependency with cond_v2_impl.
-cond_v2_impl._function = sys.modules[__name__]  # pylint: disable=protected-access
 
 
 class Defun(object):
@@ -665,7 +660,7 @@ class _FuncGraph(ops.Graph):
   def container(self, container_name):
     """Returns a context manager that specifies the resource container to use.
 
-    Overridden from @{tf.Graph} to update both the init_scope container
+    Overridden from `tf.Graph` to update both the init_scope container
     and the present inner container. This is necessary to make sure setting
     containers applies correctly both to created variables and to stateful
     ops.
@@ -819,7 +814,7 @@ class _FuncGraph(ops.Graph):
 def func_graph_from_py_func(func, arg_names, arg_types, name=None,
                             capture_by_value=False, device=None,
                             colocation_stack=None, container=None,
-                            collections_ref=None):
+                            collections_ref=None, arg_shapes=None):
   """Returns a _FuncGraph generated from `func`.
 
   Args:
@@ -836,6 +831,7 @@ def func_graph_from_py_func(func, arg_names, arg_types, name=None,
     container: A container name the _FuncGraph should start with.
     collections_ref: A reference to a collections dict the _FuncGraph should
       use internally.
+    arg_shapes: A sequence of the function's argument shapes.
 
   Returns:
     A _FuncGraph.
@@ -857,9 +853,12 @@ def func_graph_from_py_func(func, arg_names, arg_types, name=None,
       func_graph._colocation_stack = colocation_stack
     # pylint: enable=protected-access
 
+    if arg_shapes is None:
+      arg_shapes = [None] * len(arg_types)
+
     # Create placeholders for the function arguments.
-    for (argname, argtype) in zip(arg_names, arg_types):
-      argholder = array_ops.placeholder(argtype, name=argname)
+    for (argname, argtype, argshape) in zip(arg_names, arg_types, arg_shapes):
+      argholder = array_ops.placeholder(argtype, shape=argshape, name=argname)
       func_graph.inputs.append(argholder)
     # Call func and gather the output tensors.
     with vs.variable_scope("", custom_getter=func_graph.getvar):
@@ -1025,20 +1024,10 @@ def _from_definition(fdef, grad_func=None):
   result = _DefinedFunction(func, argnames, input_types, func_name, grad_func,
                             python_grad_func, out_names)
   # pylint: disable=protected-access
-  if ops._USE_C_API:
-    serialized = fdef.SerializeToString()
-    c_func = c_api.TF_FunctionImportFunctionDef(serialized)
-    result._c_func = c_api_util.ScopedTFFunction(c_func)
-    result._extra_inputs = []
-  else:
-    result._definition = fdef
-    # Captured inputs are added as regular inputs to a function when it's
-    # serialized, i.e. any extra inputs from the original function are now
-    # included in `result`._args
-    result._extra_inputs = []
-    result._hash_str = result._create_hash_str(
-        result._definition.signature.input_arg,
-        result._definition.signature.output_arg, result._definition.node_def)
+  serialized = fdef.SerializeToString()
+  c_func = c_api.TF_FunctionImportFunctionDef(serialized)
+  result._c_func = c_api_util.ScopedTFFunction(c_func)
+  result._extra_inputs = []
   # pylint: enable=protected-access
 
   return result
