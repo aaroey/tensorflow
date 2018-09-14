@@ -83,6 +83,9 @@ result = run_gdef(gdef)
 trt_gdef = simple_trt_graphdef()
 trt_result = run_gdef(trt_gdef)
 
+myprint('-' * 50)
+tf.__version__
+
 myprint('max abs result: %s' % str(np.max(np.abs(result))))
 myprint('max abs trt_result: %s' % str(np.max(np.abs(trt_result))))
 abs_diff = np.abs((result - trt_result))
