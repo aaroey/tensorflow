@@ -40,9 +40,11 @@ trt.create_inference_graph(
       -f Dockerfile.gpu \
       .
     tag=my-tf-serving-trt-devel
-  else
+  elif [[ "$1" == 'nightly' ]]; then
     tag=tensorflow/serving:nightly-gpu
-    # tag=tensorflow/serving:latest-gpu
+    docker pull $tag
+  else
+    tag=tensorflow/serving:latest-gpu
     docker pull $tag
   fi
 
