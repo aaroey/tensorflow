@@ -179,6 +179,21 @@ bool IrEmitter::MaybeEmitDirectAtomicOperation(
   bool is_atomic_integral = element_type == S32 || element_type == U32 ||
                             element_type == S64 || element_type == U64;
   llvm::Value* source = Load(source_address, "source");
+
+  // kCopy of RHS -> atomic store.
+  if (root_opcode == HloOpcode::kCopy &&
+      (element_type == F32 || is_atomic_integral) &&
+      computation.root_instruction()->operand(0)->opcode() ==
+          HloOpcode::kParameter &&
+      computation.root_instruction()->operand(0)->parameter_number() == 1) {
+    llvm::StoreInst* store = Store(source, output_address);
+    store->setAtomic(llvm::AtomicOrdering::Unordered);
+    // Derive a minimum alignment from the type. The optimizer can increase it
+    // later.
+    store->setAlignment(ShapeUtil::ByteSizeOfPrimitiveType(element_type));
+    return true;
+  }
+
   if (root_opcode == HloOpcode::kAdd) {
     // NVPTX supports atomicAdd on F32 and integer types.
     if (element_type == F32) {
@@ -480,18 +495,10 @@ Status IrEmitter::HandleDot(HloInstruction* dot) {
   TF_RET_CHECK(!ShapeUtil::IsScalar(lhs_shape) &&
                !ShapeUtil::IsScalar(rhs_shape));
 
-  // Reduce along the last dimension of the LHS and the second-to-last dimension
-  // of the RHS. Vectors are a special case where the reduction dimension is 0
-  // for both LHS and RHS. This results in a vector dot product producing a
-  // scalar.
-  const int64 lhs_reduction_dimension =
-      ShapeUtil::GetDimensionNumber(lhs_shape, -1);
-  const int64 rhs_reduction_dimension =
-      ShapeUtil::Rank(rhs_shape) >= 2 + dnums.lhs_batch_dimensions_size()
-          ? ShapeUtil::GetDimensionNumber(rhs_shape, -2)
-          : dnums.lhs_batch_dimensions_size();
+  const int64 lhs_reduction_dimension = dnums.lhs_contracting_dimensions(0);
+  const int64 rhs_reduction_dimension = dnums.rhs_contracting_dimensions(0);
 
-  // Check that the batch dims don't cover the last two dims.
+  // Check that the batch dims don't cover the reduction dimensions.
   for (int64 batch_dim : dnums.lhs_batch_dimensions()) {
     CHECK_NE(lhs_reduction_dimension, batch_dim);
     CHECK_NE(rhs_reduction_dimension, batch_dim);
@@ -499,7 +506,11 @@ Status IrEmitter::HandleDot(HloInstruction* dot) {
 
   // Verify the reduction dimension in the two operands are the same size.
   TF_RET_CHECK(lhs_shape.dimensions(lhs_reduction_dimension) ==
-               rhs_shape.dimensions(rhs_reduction_dimension));
+               rhs_shape.dimensions(rhs_reduction_dimension))
+      << "lhs_shape.dimensions(" << lhs_reduction_dimension
+      << ") = " << lhs_shape.dimensions(lhs_reduction_dimension)
+      << ", and rhs_shape.dimensions(" << rhs_reduction_dimension
+      << ") = " << rhs_shape.dimensions(rhs_reduction_dimension);
 
   // Create loop nests which loop through the LHS operand dimensions and the RHS
   // operand dimensions. The reduction dimension of the LHS and RHS are handled
@@ -762,6 +773,21 @@ StatusOr<llvm::Value*> IrEmitter::ComputeNestedElement(
   TF_RETURN_IF_ERROR(EmitCallToNestedComputation(computation, parameter_buffers,
                                                  return_buffer));
   return Load(return_buffer);
+}
+
+std::vector<llvm_ir::IrArray> IrEmitter::ConstructIrArrayForOutputs(
+    const HloInstruction& hlo) {
+  std::vector<llvm_ir::IrArray> output_arrays;
+  if (ShapeUtil::IsTuple(hlo.shape())) {
+    int64 num_outputs = ShapeUtil::TupleElementCount(hlo.shape());
+    output_arrays.reserve(num_outputs);
+    for (int64 i = 0; i < num_outputs; ++i) {
+      output_arrays.push_back(GetIrArray(hlo, hlo, {i}));
+    }
+  } else {
+    output_arrays.push_back(GetIrArray(hlo, hlo));
+  }
+  return output_arrays;
 }
 
 }  // namespace gpu

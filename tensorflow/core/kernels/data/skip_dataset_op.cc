@@ -17,10 +17,10 @@ limitations under the License.
 #include "tensorflow/core/kernels/data/dataset.h"
 
 namespace tensorflow {
-
+namespace data {
 namespace {
 
-// See documentation in ../ops/dataset_ops.cc for a high-level
+// See documentation in ../../ops/dataset_ops.cc for a high-level
 // description of the following op.
 
 class SkipDatasetOp : public UnaryDatasetOpKernel {
@@ -187,5 +187,5 @@ class SkipDatasetOp : public UnaryDatasetOpKernel {
 REGISTER_KERNEL_BUILDER(Name("SkipDataset").Device(DEVICE_CPU), SkipDatasetOp);
 
 }  // namespace
-
+}  // namespace data
 }  // namespace tensorflow

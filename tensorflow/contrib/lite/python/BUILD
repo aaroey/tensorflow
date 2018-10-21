@@ -61,16 +61,16 @@ py_library(
         ":lite_constants",
         ":op_hint",
         "//tensorflow/python:graph_util",
+        "//tensorflow/python/keras",
         "//tensorflow/python/saved_model:constants",
         "//tensorflow/python/saved_model:loader",
-        "//tensorflow/python/tools:freeze_graph_lib",
     ],
 )
 
 py_test(
     name = "lite_test",
     srcs = ["lite_test.py"],
-    data = ["@tflite_mobilenet_ssd_quant_protobuf//:tflite_graph.pbtxt"],
+    data = ["@tflite_mobilenet_ssd_quant_protobuf//:tflite_graph.pb"],
     srcs_version = "PY2AND3",
     tags = [
         "no_oss",
@@ -78,6 +78,8 @@ py_test(
     ],
     deps = [
         ":lite",
+        "//tensorflow/python:client_testlib",
+        "//tensorflow/python:framework_test_lib",
     ],
 )
 
@@ -144,13 +146,12 @@ py_library(
     name = "convert_saved_model",
     srcs = ["convert_saved_model.py"],
     srcs_version = "PY2AND3",
-    visibility = ["//visibility:public"],
+    visibility = ["//tensorflow/contrib/lite:__subpackages__"],
     deps = [
         ":convert",
-        "//tensorflow/contrib/saved_model:saved_model_py",
         "//tensorflow/python:graph_util",
         "//tensorflow/python:platform",
-        "//tensorflow/python/tools:freeze_graph_lib",
+        "//tensorflow/python/saved_model",
     ],
 )
 

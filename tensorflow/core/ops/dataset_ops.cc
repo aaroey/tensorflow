@@ -180,11 +180,14 @@ REGISTER_OP("ParseExampleDataset")
     .Attr("output_shapes: list(shape) >= 1")  // Output components will be
                                               // sorted by key (dense_keys and
                                               // sparse_keys combined) here.
+    .Attr("sloppy: bool = false")
     .SetShapeFn(shape_inference::ScalarShape);
 
 REGISTER_OP("SetStatsAggregatorDataset")
     .Input("input_dataset: variant")
     .Input("stats_aggregator: resource")
+    .Input("tag: string")
+    .Input("counter_prefix: string")
     .Output("handle: variant")
     .Attr("output_types: list(type) >= 1")
     .Attr("output_shapes: list(shape) >= 1")
@@ -198,6 +201,7 @@ REGISTER_OP("MapDataset")
     .Attr("Targuments: list(type) >= 0")
     .Attr("output_types: list(type) >= 1")
     .Attr("output_shapes: list(shape) >= 1")
+    .Attr("use_inter_op_parallelism: bool = true")
     .SetShapeFn(shape_inference::ScalarShape);
 
 REGISTER_OP("ParallelMapDataset")
@@ -209,6 +213,8 @@ REGISTER_OP("ParallelMapDataset")
     .Attr("Targuments: list(type) >= 0")
     .Attr("output_types: list(type) >= 1")
     .Attr("output_shapes: list(shape) >= 1")
+    .Attr("use_inter_op_parallelism: bool = true")
+    .Attr("sloppy: bool = false")
     .SetShapeFn(shape_inference::ScalarShape);
 
 REGISTER_OP("MapAndBatchDataset")
@@ -325,6 +331,20 @@ REGISTER_OP("ParallelInterleaveDataset")
     .Attr("output_shapes: list(shape) >= 1")
     .SetShapeFn(shape_inference::ScalarShape);
 
+REGISTER_OP("ParallelInterleaveDatasetV2")
+    .Input("input_dataset: variant")
+    .Input("other_arguments: Targuments")
+    .Input("cycle_length: int64")
+    .Input("block_length: int64")
+    .Input("num_parallel_calls: int64")
+    .Output("handle: variant")
+    .Attr("f: func")
+    .Attr("Targuments: list(type) >= 0")
+    .Attr("output_types: list(type) >= 1")
+    .Attr("output_shapes: list(shape) >= 1")
+    .Attr("sloppy: bool = false")
+    .SetShapeFn(shape_inference::ScalarShape);
+
 REGISTER_OP("GroupByReducerDataset")
     .Input("input_dataset: variant")
     .Input("key_func_other_arguments: Tkey_func_other_arguments")
@@ -381,14 +401,20 @@ REGISTER_OP("FilterByLastComponentDataset")
 
 REGISTER_OP("WindowDataset")
     .Input("input_dataset: variant")
-    .Input("window_size: int64")
+    .Input("size: int64")
+    .Input("shift: int64")
+    .Input("stride: int64")
+    .Input("drop_remainder: bool")
     .Output("handle: variant")
     .Attr("output_types: list(type) >= 1")
     .Attr("output_shapes: list(shape) >= 1")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       shape_inference::ShapeHandle unused;
-      // batch_size should be a scalar.
+      // size, shift, stride, and drop_remainder should be scalars.
       TF_RETURN_IF_ERROR(c->WithRank(c->input(1), 0, &unused));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(2), 0, &unused));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(3), 0, &unused));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(4), 0, &unused));
       return shape_inference::ScalarShape(c);
     });
 
@@ -596,6 +622,18 @@ REGISTER_OP("TextLineDataset")
       return shape_inference::ScalarShape(c);
     });
 
+REGISTER_OP("MatchingFilesDataset")
+    .Input("patterns: string")
+    .Output("handle: variant")
+    .SetIsStateful()  // TODO(b/65524810): Source dataset ops must be marked
+                      // stateful to inhibit constant folding.
+    .SetShapeFn([](shape_inference::InferenceContext* c) {
+      shape_inference::ShapeHandle unused;
+      // `patterns` must be a scalar or a vector.
+      TF_RETURN_IF_ERROR(c->WithRankAtMost(c->input(0), 1, &unused));
+      return shape_inference::ScalarShape(c);
+    });
+
 REGISTER_OP("SqlDataset")
     .Input("driver_name: string")
     .Input("data_source_name: string")
@@ -735,6 +773,19 @@ REGISTER_OP("DatasetToSingleElement")
     .Attr("output_shapes: list(shape) >= 1")
     .SetShapeFn(IteratorGetNextShapeFn);
 
+REGISTER_OP("ReduceDataset")
+    .Input("input_dataset: variant")
+    .Input("initial_state: Tstate")
+    .Input("other_arguments: Targuments")
+    .Output("components: output_types")
+    .Attr("f: func")
+    .Attr("Tstate: list(type) >= 1")
+    .Attr("Targuments: list(type) >= 0")
+    .Attr("output_types: list(type) >= 1")
+    .Attr("output_shapes: list(shape) >= 1")
+    .Attr("use_inter_op_parallelism: bool = true")
+    .SetShapeFn(IteratorGetNextShapeFn);
+
 REGISTER_OP("IteratorToStringHandle")
     .Input("resource_handle: resource")
     .Output("string_handle: string")
@@ -858,16 +909,27 @@ REGISTER_OP("IteratorGetNextAsOptional")
     .Attr("output_shapes: list(shape) >= 1")
     .SetShapeFn(shape_inference::ScalarShape);
 
+REGISTER_OP("ModelDataset")
+    .Input("input_dataset: variant")
+    .Output("handle: variant")
+    .Attr("output_types: list(type) >= 1")
+    .Attr("output_shapes: list(shape) >= 1")
+    .SetShapeFn(shape_inference::ScalarShape);
+
 REGISTER_OP("MapDefun")
     .Input("arguments: Targuments")
+    .Input("captured_inputs: Tcaptured")
     .Output("output: output_types")
     .Attr("Targuments: list(type) >= 1")
+    .Attr("Tcaptured: list(type) >= 0 = []")
     .Attr("output_types: list(type) >= 1")
     .Attr("output_shapes: list(shape) >= 1")
     .Attr("f: func")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
-      std::vector<TensorShape> output_shapes;
+      std::vector<PartialTensorShape> output_shapes;
       TF_RETURN_IF_ERROR(c->GetAttr("output_shapes", &output_shapes));
+      DataTypeVector t_args;
+      TF_RETURN_IF_ERROR(c->GetAttr("Targuments", &t_args));
       if (output_shapes.size() != c->num_outputs()) {
         return errors::InvalidArgument(
             "`output_shapes` must be the same length as `output_types` (",
@@ -875,14 +937,19 @@ REGISTER_OP("MapDefun")
       }
 
       int64 dim_zero = -1;
-      for (size_t i = 0; i < static_cast<size_t>(c->num_inputs()); ++i) {
+      for (size_t i = 0; i < t_args.size(); ++i) {
+        if (c->Rank(c->input(i)) == 0) {
+          return errors::InvalidArgument(
+              "Arguments must have rank at least 1. Input ", i,
+              " has rank of 0.");
+        }
         auto dim_handle = c->Dim(c->input(i), 0);
         if (c->ValueKnown(dim_handle)) {
           if (dim_zero == -1) {
             dim_zero = c->Value(dim_handle);
           } else if (c->Value(dim_handle) != dim_zero) {
             return errors::InvalidArgument(
-                "Inputs must have the same dimension 0.");
+                "Arguments must have the same dimension 0.");
           }
         }
       }
@@ -899,5 +966,42 @@ REGISTER_OP("MapDefun")
       }
       return Status::OK();
     });
+
+REGISTER_OP("MultiDeviceIterator")
+    .Output("handle: resource")
+    .Attr("devices: list(string) >= 1")
+    .Attr("shared_name: string")
+    .Attr("container: string")
+    .Attr("output_types: list(type) >= 1")
+    .Attr("output_shapes: list(shape) >= 1")
+    .SetShapeFn(shape_inference::ScalarShape);
+
+REGISTER_OP("MultiDeviceIteratorInit")
+    .Input("dataset: variant")
+    .Input("multi_device_iterator: resource")
+    .Input("max_buffer_size: int64")
+    .Output("incarnation_id: int64")
+    .SetShapeFn(shape_inference::ScalarShape);
+
+REGISTER_OP("MultiDeviceIteratorGetNextFromShard")
+    .Input("multi_device_iterator: resource")
+    .Input("shard_num: int32")
+    .Input("incarnation_id: int64")
+    .Output("components: output_types")
+    .Attr("output_types: list(type) >= 1")
+    .Attr("output_shapes: list(shape) >= 1")
+    .SetShapeFn(IteratorGetNextShapeFn);
+
+REGISTER_OP("MultiDeviceIteratorToStringHandle")
+    .Input("multi_device_iterator: resource")
+    .Output("string_handle: string")
+    .SetShapeFn(shape_inference::ScalarShape);
+
+REGISTER_OP("MultiDeviceIteratorFromStringHandle")
+    .Input("string_handle: string")
+    .Output("multi_device_iterator: resource")
+    .Attr("output_types: list(type) >= 0 = []")
+    .Attr("output_shapes: list(shape) >= 0 = []")
+    .SetShapeFn(shape_inference::ScalarShape);
 
 }  // namespace tensorflow

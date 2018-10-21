@@ -17,10 +17,10 @@ limitations under the License.
 #include "tensorflow/core/kernels/data/dataset.h"
 
 namespace tensorflow {
-
+namespace data {
 namespace {
 
-// See documentation in ../ops/dataset_ops.cc for a high-level
+// See documentation in ../../ops/dataset_ops.cc for a high-level
 // description of the following op.
 
 class ZipDatasetOp : public DatasetOpKernel {
@@ -175,5 +175,5 @@ class ZipDatasetOp : public DatasetOpKernel {
 REGISTER_KERNEL_BUILDER(Name("ZipDataset").Device(DEVICE_CPU), ZipDatasetOp);
 
 }  // namespace
-
+}  // namespace data
 }  // namespace tensorflow

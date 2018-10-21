@@ -84,17 +84,17 @@ class XlaConvOp : public XlaOpKernel {
 
  private:
   xla::ConvolutionDimensionNumbers dnums_;
-  xla::PrecisionConfigProto precision_config_;
+  xla::PrecisionConfig precision_config_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(XlaConvOp);
 };
 
 REGISTER_XLA_OP(Name("XlaConv")
-                    .CompileTimeConstInput("window_strides")
-                    .CompileTimeConstInput("lhs_dilation")
-                    .CompileTimeConstInput("rhs_dilation")
-                    .CompileTimeConstInput("feature_group_count")
-                    .CompileTimeConstInput("padding"),
+                    .CompileTimeConstantInput("window_strides")
+                    .CompileTimeConstantInput("lhs_dilation")
+                    .CompileTimeConstantInput("rhs_dilation")
+                    .CompileTimeConstantInput("feature_group_count")
+                    .CompileTimeConstantInput("padding"),
                 XlaConvOp);
 
 }  // namespace

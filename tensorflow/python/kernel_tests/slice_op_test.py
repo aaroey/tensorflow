@@ -26,6 +26,7 @@ from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import errors_impl
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gradients_impl
+from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import test
 
 
@@ -34,7 +35,7 @@ class SliceTest(test.TestCase):
   def testEmpty(self):
     inp = np.random.rand(4, 4).astype("f")
     for k in xrange(4):
-      with self.test_session(use_gpu=True):
+      with self.cached_session(use_gpu=True):
         a = constant_op.constant(inp, shape=[4, 4], dtype=dtypes.float32)
         slice_t = a[2, k:k]
         slice_val = slice_t.eval()
@@ -43,14 +44,14 @@ class SliceTest(test.TestCase):
   def testInt32(self):
     inp = np.random.rand(4, 4).astype("i")
     for k in xrange(4):
-      with self.test_session(use_gpu=True):
+      with self.cached_session(use_gpu=True):
         a = constant_op.constant(inp, shape=[4, 4], dtype=dtypes.int32)
         slice_t = a[2, k:k]
         slice_val = slice_t.eval()
       self.assertAllEqual(slice_val, inp[2, k:k])
 
   def testInt64Slicing(self):
-    with self.test_session(use_gpu=True):
+    with self.cached_session(use_gpu=True):
       a = constant_op.constant([0, 1, 2], dtype=dtypes.int64)
 
       # Slice using int64 Tensor.
@@ -73,7 +74,7 @@ class SliceTest(test.TestCase):
 
   def testSelectAll(self):
     for _ in range(10):
-      with self.test_session(use_gpu=True):
+      with self.cached_session(use_gpu=True):
         inp = np.random.rand(4, 4, 4, 4).astype("f")
         a = constant_op.constant(inp, shape=[4, 4, 4, 4], dtype=dtypes.float32)
 
@@ -87,7 +88,7 @@ class SliceTest(test.TestCase):
 
   def testSingleDimension(self):
     for _ in range(10):
-      with self.test_session(use_gpu=True):
+      with self.cached_session(use_gpu=True):
         inp = np.random.rand(10).astype("f")
         a = constant_op.constant(inp, shape=[10], dtype=dtypes.float32)
 
@@ -106,7 +107,7 @@ class SliceTest(test.TestCase):
 
   def testScalarInput(self):
     input_val = 0
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       # Test with constant input; shape inference fails.
       with self.assertRaisesWithPredicateMatch(ValueError, "out of range"):
         constant_op.constant(input_val)[:].get_shape()
@@ -120,7 +121,7 @@ class SliceTest(test.TestCase):
 
   def testInvalidIndex(self):
     input_val = [1, 2]
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       # Test with constant input; shape inference fails.
       with self.assertRaisesWithPredicateMatch(ValueError, "out of range"):
         constant_op.constant(input_val)[1:, 1:].get_shape()
@@ -133,7 +134,7 @@ class SliceTest(test.TestCase):
         sess.run([slice_t], feed_dict={input_t: input_val})
 
   def _testSliceMatrixDim0(self, x, begin, size):
-    with self.test_session(use_gpu=True):
+    with self.cached_session(use_gpu=True):
       tf_ans = array_ops.slice(x, [begin, 0], [size, x.shape[1]]).eval()
     np_ans = x[begin:begin + size, :]
     self.assertAllEqual(tf_ans, np_ans)
@@ -148,7 +149,7 @@ class SliceTest(test.TestCase):
 
   def testSingleElementAll(self):
     for _ in range(10):
-      with self.test_session(use_gpu=True):
+      with self.cached_session(use_gpu=True):
         inp = np.random.rand(4, 4).astype("f")
         a = constant_op.constant(inp, shape=[4, 4], dtype=dtypes.float32)
 
@@ -158,7 +159,7 @@ class SliceTest(test.TestCase):
       self.assertAllEqual(slice_val, inp[x, 0:y])
 
   def testSimple(self):
-    with self.test_session(use_gpu=True) as sess:
+    with self.session(use_gpu=True) as sess:
       inp = np.random.rand(4, 4).astype("f")
       a = constant_op.constant(
           [float(x) for x in inp.ravel(order="C")],
@@ -173,7 +174,7 @@ class SliceTest(test.TestCase):
     self.assertEqual(slice2_val.shape, slice2_t.get_shape())
 
   def testComplex(self):
-    with self.test_session(use_gpu=True):
+    with self.session(use_gpu=True):
       inp = np.random.rand(4, 10, 10, 4).astype("f")
       a = constant_op.constant(inp, dtype=dtypes.float32)
 
@@ -190,7 +191,7 @@ class SliceTest(test.TestCase):
     # Random dims of rank 6
     input_shape = np.random.randint(0, 20, size=6)
     inp = np.random.rand(*input_shape).astype("f")
-    with self.test_session(use_gpu=True) as sess:
+    with self.session(use_gpu=True) as sess:
       a = constant_op.constant(
           [float(x) for x in inp.ravel(order="C")],
           shape=input_shape,
@@ -229,7 +230,7 @@ class SliceTest(test.TestCase):
 
 
   def _testGradientSlice(self, input_shape, slice_begin, slice_size):
-    with self.test_session(use_gpu=True):
+    with self.cached_session(use_gpu=True):
       num_inputs = np.prod(input_shape)
       num_grads = np.prod(slice_size)
       inp = np.random.rand(num_inputs).astype("f").reshape(input_shape)
@@ -254,11 +255,26 @@ class SliceTest(test.TestCase):
     self.assertAllClose(np_ans, result)
 
   def _testGradientVariableSize(self):
-    with self.test_session(use_gpu=True):
+    with self.cached_session(use_gpu=True):
       inp = constant_op.constant([1.0, 2.0, 3.0], name="in")
       out = array_ops.slice(inp, [1], [-1])
       grad_actual = gradients_impl.gradients(out, inp)[0].eval()
     self.assertAllClose([0., 1., 1.], grad_actual)
+
+  def _testGradientVariableSize2D(self):
+    # Regression test for bug in slice. A low-level bug in Eigen was causing
+    # incorrect results for negative indices in multi-dimensional tensors.
+    # See b/114318298.
+    with self.cached_session(use_gpu=True) as sess:
+      x = constant_op.constant([[1., 2., 3.], [4., 5., 6.], [7., 8., 7]])
+      loss1 = math_ops.reduce_sum(x[:-1, :-1] * 1.0)
+      loss2 = math_ops.reduce_sum(x[:-1][:, :-1])
+
+      g1 = gradients_impl.gradients(loss1, x)[0]
+      g2 = gradients_impl.gradients(loss2, x)[0]
+
+      g1_val, g2_val = sess.run([g1, g2])
+    self.assertAllEqual(g1_val, g2_val)
 
   def testGradientsAll(self):
     # Slice the middle square out of a 4x4 input
@@ -275,6 +291,9 @@ class SliceTest(test.TestCase):
 
     # Use -1 as a slice dimension.
     self._testGradientVariableSize()
+
+    # Use -1 as a slice dimension on a 2D tensor.
+    self._testGradientVariableSize2D()
 
   def testNotIterable(self):
     # NOTE(mrry): If we register __getitem__ as an overloaded
@@ -303,7 +322,7 @@ class SliceTest(test.TestCase):
     self.assertEqual([None, 2], c.get_shape().as_list())
 
   def testSliceOfSlice(self):
-    with self.test_session(use_gpu=True):
+    with self.session(use_gpu=True):
       a = constant_op.constant([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]])
       b = a[1:, :]
       c = b[:-1, :]

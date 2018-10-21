@@ -99,25 +99,29 @@ class OpNameMetadata : public DomainMetadata {
 
   static absl::string_view KindName() { return "opname"; }
 
+  size_t Hash() const override { return std::hash<string>()(opname_); }
+
  private:
   string opname_;
 };
 
 // Creator function for OpNameMetadata domains.
-HloInstruction* OpNameDomainCreator(HloInstruction* instruction,
-                                    HloInstruction* root,
-                                    HloInstruction* operand) {
-  if (instruction->metadata().op_name() == root->metadata().op_name()) {
-    return nullptr;
+class OpNameDomainCreator {
+ public:
+  HloInstruction* operator()(HloInstruction* instruction, HloInstruction* root,
+                             HloInstruction* operand) {
+    if (instruction->metadata().op_name() == root->metadata().op_name()) {
+      return nullptr;
+    }
+    std::unique_ptr<DomainMetadata> operand_side_metadata =
+        absl::make_unique<OpNameMetadata>(root->metadata().op_name());
+    std::unique_ptr<DomainMetadata> user_side_metadata =
+        absl::make_unique<OpNameMetadata>(instruction->metadata().op_name());
+    return operand->parent()->AddInstruction(HloInstruction::CreateDomain(
+        operand->shape(), operand, std::move(operand_side_metadata),
+        std::move(user_side_metadata)));
   }
-  std::unique_ptr<DomainMetadata> operand_side_metadata =
-      absl::make_unique<OpNameMetadata>(root->metadata().op_name());
-  std::unique_ptr<DomainMetadata> user_side_metadata =
-      absl::make_unique<OpNameMetadata>(instruction->metadata().op_name());
-  return operand->parent()->AddInstruction(HloInstruction::CreateDomain(
-      operand->shape(), operand, std::move(operand_side_metadata),
-      std::move(user_side_metadata)));
-}
+};
 
 Status OpNameDomainNormalizer(const DomainMetadata::Domain& domain,
                               const DomainMetadata* metadata) {
@@ -143,7 +147,7 @@ ENTRY entry {
   TF_ASSERT_OK_AND_ASSIGN(HloModule * module, ParseModule(hlo_string));
   LOG(INFO) << "Original module:\n" << module->ToString();
 
-  HloDomainIsolator isolator(ShardingDomainCreator{});
+  HloDomainIsolator isolator([]() { return ShardingDomainCreator{}; });
   TF_ASSERT_OK_AND_ASSIGN(bool isolator_changed, isolator.Run(module));
   EXPECT_TRUE(isolator_changed);
 
@@ -185,7 +189,7 @@ ENTRY entry {
   TF_ASSERT_OK_AND_ASSIGN(HloModule * module, ParseModule(hlo_string));
   LOG(INFO) << "Original module:\n" << module->ToString();
 
-  HloDomainIsolator isolator(ShardingDomainCreator{});
+  HloDomainIsolator isolator([]() { return ShardingDomainCreator{}; });
   TF_ASSERT_OK_AND_ASSIGN(bool isolator_changed, isolator.Run(module));
   EXPECT_TRUE(!isolator_changed);
 }
@@ -212,7 +216,7 @@ ENTRY entry {
   TF_ASSERT_OK_AND_ASSIGN(HloModule * module, ParseModule(hlo_string));
   LOG(INFO) << "Original module:\n" << module->ToString();
 
-  HloDomainIsolator isolator(ShardingDomainCreator{});
+  HloDomainIsolator isolator([]() { return ShardingDomainCreator{}; });
   TF_ASSERT_OK_AND_ASSIGN(bool isolator_changed, isolator.Run(module));
   EXPECT_TRUE(isolator_changed);
 
@@ -249,7 +253,7 @@ ENTRY entry {
   TF_ASSERT_OK_AND_ASSIGN(HloModule * module, ParseModule(hlo_string));
   LOG(INFO) << "Original module:\n" << module->ToString();
 
-  HloDomainIsolator isolator(ShardingDomainCreator{});
+  HloDomainIsolator isolator([]() { return ShardingDomainCreator{}; });
   TF_ASSERT_OK_AND_ASSIGN(bool isolator_changed, isolator.Run(module));
   EXPECT_FALSE(isolator_changed);
 }
@@ -303,12 +307,12 @@ ENTRY entry {
   TF_ASSERT_OK_AND_ASSIGN(HloModule * module, ParseModule(hlo_string));
   LOG(INFO) << "Original module:\n" << module->ToString();
 
-  HloDomainIsolator sharding_isolator(ShardingDomainCreator{});
+  HloDomainIsolator sharding_isolator([]() { return ShardingDomainCreator{}; });
   TF_ASSERT_OK_AND_ASSIGN(bool sharding_isolator_changed,
                           sharding_isolator.Run(module));
   EXPECT_TRUE(sharding_isolator_changed);
 
-  HloDomainIsolator opname_isolator(OpNameDomainCreator);
+  HloDomainIsolator opname_isolator([]() { return OpNameDomainCreator{}; });
   TF_ASSERT_OK_AND_ASSIGN(bool opname_isolator_changed,
                           opname_isolator.Run(module));
   EXPECT_TRUE(opname_isolator_changed);
@@ -358,7 +362,7 @@ ENTRY entry {
   TF_ASSERT_OK_AND_ASSIGN(HloModule * module, ParseModule(hlo_string));
   LOG(INFO) << "Original module:\n" << module->ToString();
 
-  HloDomainIsolator isolator(ShardingDomainCreator{});
+  HloDomainIsolator isolator([]() { return ShardingDomainCreator{}; });
   TF_ASSERT_OK_AND_ASSIGN(bool isolator_changed, isolator.Run(module));
   EXPECT_TRUE(isolator_changed);
 
@@ -444,7 +448,7 @@ ENTRY entry {
 
   TF_ASSERT_OK_AND_ASSIGN(HloModule * module, ParseModule(hlo_string));
 
-  HloDomainIsolator isolator(ShardingDomainCreator{});
+  HloDomainIsolator isolator([]() { return ShardingDomainCreator{}; });
   TF_ASSERT_OK_AND_ASSIGN(bool isolator_changed, isolator.Run(module));
   EXPECT_TRUE(isolator_changed);
 
@@ -505,7 +509,7 @@ ENTRY entry {
 
   TF_ASSERT_OK_AND_ASSIGN(HloModule * module, ParseModule(hlo_string));
 
-  HloDomainIsolator isolator(ShardingDomainCreator{});
+  HloDomainIsolator isolator([]() { return ShardingDomainCreator{}; });
   TF_ASSERT_OK_AND_ASSIGN(bool isolator_changed, isolator.Run(module));
   EXPECT_TRUE(isolator_changed);
 
@@ -554,7 +558,7 @@ ENTRY %entry (p0: (f32[4], f32[4])) -> (f32[4], f32[4], f32[4]) {
   TF_ASSERT_OK_AND_ASSIGN(HloModule * module, ParseModule(hlo_string));
   LOG(INFO) << "Original module:\n" << module->ToString();
 
-  HloDomainIsolator opname_isolator(OpNameDomainCreator);
+  HloDomainIsolator opname_isolator([]() { return OpNameDomainCreator{}; });
   TF_ASSERT_OK_AND_ASSIGN(bool opname_isolator_changed,
                           opname_isolator.Run(module));
   EXPECT_TRUE(opname_isolator_changed);
@@ -601,7 +605,7 @@ ENTRY entry {
 
   TF_ASSERT_OK_AND_ASSIGN(HloModule * module, ParseModule(hlo_string));
 
-  HloDomainIsolator isolator(ShardingDomainCreator{});
+  HloDomainIsolator isolator([]() { return ShardingDomainCreator{}; });
   TF_ASSERT_OK_AND_ASSIGN(bool isolator_changed, isolator.Run(module));
   EXPECT_TRUE(isolator_changed);
 

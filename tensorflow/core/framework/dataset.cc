@@ -19,7 +19,7 @@ limitations under the License.
 #include "tensorflow/core/graph/node_builder.h"
 
 namespace tensorflow {
-
+namespace data {
 namespace {
 
 // A wrapper class for storing a `DatasetBase` instance in a DT_VARIANT tensor.
@@ -329,4 +329,5 @@ void BackgroundWorker::WorkerLoop() {
   }
 }
 
+}  // namespace data
 }  // namespace tensorflow

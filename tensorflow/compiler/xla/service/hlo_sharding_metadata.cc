@@ -169,14 +169,14 @@ Status ApplyDomainSingleSharding(const DomainMetadata::Domain& domain,
 // If user is a tuple instruction, return the tuple subsharding corresponding to
 // the operand matching the instruction argument, because that is the
 // subsharding corresponding to instruction.
-ShapeTree<HloSharding> GetShardingTreeFromUser(
+StatusOr<ShapeTree<HloSharding>> GetShardingTreeFromUser(
     const HloInstruction& instruction, const HloInstruction& user) {
   if (user.opcode() == HloOpcode::kTuple) {
     return user.sharding()
         .GetSubSharding(user.shape(), {user.operand_index(&instruction)})
-        .GetAsShapeTree(instruction.shape());
+        .AsShapeTree(instruction.shape());
   }
-  return user.sharding().GetAsShapeTree(user.shape());
+  return user.sharding().AsShapeTree(user.shape());
 }
 
 // Assign rhs to lhs. If rhs is unassigned (assigned to kUnassignedDevice)
@@ -264,8 +264,8 @@ StatusOr<bool> ApplyShardingFromUsers(HloInstruction* instruction,
       continue;
     }
     AssignmentKind sub_assigned = AssignmentKind::kUnassigned;
-    ShapeTree<HloSharding> user_sharding_tree =
-        GetShardingTreeFromUser(*instruction, *user);
+    TF_ASSIGN_OR_RETURN(ShapeTree<HloSharding> user_sharding_tree,
+                        GetShardingTreeFromUser(*instruction, *user));
     if (ShapeUtil::IsTuple(instruction->shape())) {
       // For tuple-shaped instructions collect individual tuple subshardings
       // from the uses, and then combine them into the tuple sharding.
@@ -420,6 +420,13 @@ bool ShardingMetadata::Matches(const DomainMetadata& other) const {
   return other_ptr->sharding_ != nullptr
              ? ShardingMatches(*sharding_, *other_ptr->sharding_)
              : false;
+}
+
+size_t ShardingMetadata::Hash() const {
+  if (sharding_ != nullptr) {
+    return sharding_->Hash();
+  }
+  return static_cast<size_t>(0x297814aaad196e6dULL);
 }
 
 string ShardingMetadata::ToString() const {

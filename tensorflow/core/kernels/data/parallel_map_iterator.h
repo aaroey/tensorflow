@@ -20,6 +20,7 @@ limitations under the License.
 #include "tensorflow/core/framework/dataset.h"
 
 namespace tensorflow {
+namespace data {
 
 // A function that transforms elements of one dataset into another
 // asynchronously. The arguments are:
@@ -29,7 +30,7 @@ namespace tensorflow {
 // 3. A `std::vector<Tensor>*` to which the function will write the result.
 // 4. A `StatusCallback` that should be invoked when the function is complete.
 using ParallelMapIteratorFunction =
-    std::function<void(IteratorContext*, std::vector<Tensor>,
+    std::function<void(IteratorContext*, const string&, std::vector<Tensor>,
                        std::vector<Tensor>*, StatusCallback)>;
 
 // Returns a new iterator that applies `map_func` to the elements of
@@ -41,12 +42,10 @@ std::unique_ptr<IteratorBase> NewParallelMapIterator(
     const DatasetBaseIterator::BaseParams& params,
     const DatasetBase* input_dataset,
     std::function<Status(IteratorContext*)> init_func,
-    ParallelMapIteratorFunction map_func, int32 num_parallel_calls);
-std::unique_ptr<IteratorBase> NewParallelMapIterator(
-    const DatasetBaseIterator::BaseParams& params,
-    const DatasetBase* input_dataset, ParallelMapIteratorFunction map_func,
-    int32 num_parallel_calls);
+    ParallelMapIteratorFunction map_func, int32 num_parallel_calls,
+    bool sloppy);
 
+}  // namespace data
 }  // namespace tensorflow
 
 #endif  // TENSORFLOW_CORE_KERNELS_DATA_PARALLEL_MAP_ITERATOR_H_

@@ -67,7 +67,7 @@ class ReverseOp : public XlaOpKernel {
   }
 };
 
-REGISTER_XLA_OP(Name("Reverse").CompileTimeConstInput("dims"), ReverseOp);
+REGISTER_XLA_OP(Name("Reverse").CompileTimeConstantInput("dims"), ReverseOp);
 
 class ReverseV2Op : public XlaOpKernel {
  public:
@@ -97,7 +97,7 @@ class ReverseV2Op : public XlaOpKernel {
 
     // witnessed_axes is used to ensure that the same axis is not marked to be
     // reversed multiple times.
-    gtl::InlinedVector<bool, 8> witnessed_axes(x_shape.dims(), false);
+    absl::InlinedVector<bool, 8> witnessed_axes(x_shape.dims(), false);
 
     for (int d = 0; d < axes.size(); ++d) {
       OP_REQUIRES(
@@ -119,7 +119,8 @@ class ReverseV2Op : public XlaOpKernel {
   }
 };
 
-REGISTER_XLA_OP(Name("ReverseV2").CompileTimeConstInput("axis"), ReverseV2Op);
+REGISTER_XLA_OP(Name("ReverseV2").CompileTimeConstantInput("axis"),
+                ReverseV2Op);
 
 }  // namespace
 }  // namespace tensorflow

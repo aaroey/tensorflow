@@ -262,7 +262,9 @@ class ParameterServerStrategyTestBase(
           h = f + 1.0
         self.assertEqual(
             device_util.canonicalize(u.device), tower_variable_device)
-        self.assertEqual(device_util.canonicalize(x.device), h.device)
+        self.assertEqual(
+            device_util.canonicalize(x.device),
+            device_util.canonicalize(h.device))
         return y_add, z_add, f
 
       y, z, f = d.call_for_each_tower(model_fn)
@@ -395,7 +397,8 @@ class ParameterServerStrategyTestBase(
             # TODO(yuefengz): support non-Mirrored variable as destinations.
             g = d.reduce(
                 variable_scope.VariableAggregation.SUM, g, destinations=v)
-            with ops.control_dependencies(d.unwrap(d.update(v, update, g))):
+            with ops.control_dependencies(
+                d.update(v, update, g, grouped=False)):
               after_list.append(d.read_var(v))
         return before_list, after_list
 
@@ -436,6 +439,13 @@ class ParameterServerStrategyTest(ParameterServerStrategyTestBase,
     cls._cluster_spec = multi_worker_test_base.create_in_process_cluster(
         num_workers=3, num_ps=2)
     cls._default_target = 'grpc://' + cls._cluster_spec[WORKER][0]
+
+  def test_num_replicas_in_sync(self):
+    distribution = parameter_server_strategy.ParameterServerStrategy(
+        num_gpus_per_worker=2)
+    # All the devices on a given worker are in sync which in this case is the
+    # number of gpus on each worker.
+    self.assertEqual(2, distribution.num_replicas_in_sync)
 
   def testDeviceAssignmentLocalCPU(self):
     distribution = parameter_server_strategy.ParameterServerStrategy(

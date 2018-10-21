@@ -138,7 +138,7 @@ xla::TensorFormat XlaTensorFormat(tensorflow::TensorFormat data_format,
   int num_dims = num_spatial_dims + 2;
   int batch_dimension = GetTensorBatchDimIndex(num_dims, data_format);
   int feature_dimension = GetTensorFeatureDimIndex(num_dims, data_format);
-  gtl::InlinedVector<int64, 4> spatial_dimensions(num_spatial_dims);
+  absl::InlinedVector<int64, 4> spatial_dimensions(num_spatial_dims);
   for (int spatial_dim = 0; spatial_dim < num_spatial_dims; ++spatial_dim) {
     spatial_dimensions[spatial_dim] =
         GetTensorSpatialDimIndex(num_dims, data_format, spatial_dim);
@@ -188,8 +188,8 @@ class MaxPool2DOp : public MaxPoolOp {
 };
 REGISTER_XLA_OP(Name("MaxPool"), MaxPool2DOp);
 REGISTER_XLA_OP(Name("MaxPoolV2")
-                    .CompileTimeConstInput("ksize")
-                    .CompileTimeConstInput("strides"),
+                    .CompileTimeConstantInput("ksize")
+                    .CompileTimeConstantInput("strides"),
                 MaxPool2DOp);
 
 class MaxPool3DOp : public MaxPoolOp {
@@ -360,8 +360,8 @@ class MaxPool2DGradOp : public MaxPoolGradOp {
 };
 REGISTER_XLA_OP(Name("MaxPoolGrad"), MaxPool2DGradOp);
 REGISTER_XLA_OP(Name("MaxPoolGradV2")
-                    .CompileTimeConstInput("ksize")
-                    .CompileTimeConstInput("strides"),
+                    .CompileTimeConstantInput("ksize")
+                    .CompileTimeConstantInput("strides"),
                 MaxPool2DGradOp);
 
 class MaxPool3DGradOp : public MaxPoolGradOp {
@@ -455,16 +455,18 @@ class AvgPool2DGradOp : public AvgPoolGradOp {
                 errors::InvalidArgument("Invalid data format"));
   }
 };
-REGISTER_XLA_OP(Name("AvgPoolGrad").CompileTimeConstInput("orig_input_shape"),
-                AvgPool2DGradOp);
+REGISTER_XLA_OP(
+    Name("AvgPoolGrad").CompileTimeConstantInput("orig_input_shape"),
+    AvgPool2DGradOp);
 
 class AvgPool3DGradOp : public AvgPoolGradOp {
  public:
   explicit AvgPool3DGradOp(OpKernelConstruction* ctx)
       : AvgPoolGradOp(ctx, /*num_spatial_dims=*/3) {}
 };
-REGISTER_XLA_OP(Name("AvgPool3DGrad").CompileTimeConstInput("orig_input_shape"),
-                AvgPool3DGradOp);
+REGISTER_XLA_OP(
+    Name("AvgPool3DGrad").CompileTimeConstantInput("orig_input_shape"),
+    AvgPool3DGradOp);
 
 class MaxPoolGradGradOp : public XlaOpKernel {
  public:
@@ -632,8 +634,8 @@ REGISTER_XLA_OP(Name("MaxPoolGradGrad").TypeConstraint("T", DT_FLOAT),
                 MaxPool2DGradGradOp);
 REGISTER_XLA_OP(Name("MaxPoolGradGradV2")
                     .TypeConstraint("T", DT_FLOAT)
-                    .CompileTimeConstInput("ksize")
-                    .CompileTimeConstInput("strides"),
+                    .CompileTimeConstantInput("ksize")
+                    .CompileTimeConstantInput("strides"),
                 MaxPool2DGradGradOp);
 
 class MaxPool3DGradGradOp : public MaxPoolGradGradOp {

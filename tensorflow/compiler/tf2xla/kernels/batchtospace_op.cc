@@ -26,7 +26,7 @@ void BatchToSpace(XlaOpKernelContext* ctx, const xla::XlaOp& input,
                   absl::Span<const int64> block_shape,
                   const xla::Literal& crops) {
   const int input_rank = input_tensor_shape.dims();
-  const gtl::InlinedVector<int64, 4> input_shape =
+  const absl::InlinedVector<int64, 4> input_shape =
       input_tensor_shape.dim_sizes();
   const int block_rank = block_shape.size();
 
@@ -159,8 +159,8 @@ class BatchToSpaceNDOp : public XlaOpKernel {
   }
 };
 REGISTER_XLA_OP(Name("BatchToSpaceND")
-                    .CompileTimeConstInput("block_shape")
-                    .CompileTimeConstInput("crops"),
+                    .CompileTimeConstantInput("block_shape")
+                    .CompileTimeConstantInput("crops"),
                 BatchToSpaceNDOp);
 
 class BatchToSpaceOp : public XlaOpKernel {
@@ -183,7 +183,7 @@ class BatchToSpaceOp : public XlaOpKernel {
  private:
   int block_size_;
 };
-REGISTER_XLA_OP(Name("BatchToSpace").CompileTimeConstInput("crops"),
+REGISTER_XLA_OP(Name("BatchToSpace").CompileTimeConstantInput("crops"),
                 BatchToSpaceOp);
 
 }  // namespace

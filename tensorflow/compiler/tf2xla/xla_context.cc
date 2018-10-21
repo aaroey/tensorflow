@@ -32,7 +32,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/core/common_runtime/dma_helper.h"
-#include "tensorflow/core/lib/strings/strcat.h"
 #include "tensorflow/core/platform/logging.h"
 
 namespace tensorflow {
@@ -120,6 +119,17 @@ Status XlaContext::AddResourceRetval(int retval_index, XlaResource* resource) {
   return Status::OK();
 }
 
+Status XlaContext::AppendTokenRetval(const xla::XlaOp& token) {
+  VLOG(1) << "Adding retval index " << retvals_.size()
+          << " with token to XLA computation";
+  XlaExpression e;
+  e.set_handle(token);
+  // We use DT_INVALID because there is no TF DataType which corresponds to XLA
+  // token. XlaCompiler handles this case separately, so putting it here is OK.
+  retvals_.push_back(Retval{DT_INVALID, TensorShape(), e});
+  return Status::OK();
+}
+
 xla::XlaBuilder* XlaContext::builder() { return builder_; }
 
 Status XlaContext::CreateResource(
@@ -128,7 +138,8 @@ Status XlaContext::CreateResource(
     const std::set<string>& tensor_array_gradients, XlaResource** resource) {
   resources_.emplace_back(
       new XlaResource(kind, arg_num, std::move(name), type, std::move(shape),
-                      handle, tensor_array_size, tensor_array_gradients));
+                      handle, tensor_array_size, tensor_array_gradients,
+                      /*tensor_array_multiple_writes_aggregate=*/false));
   *resource = resources_.back().get();
   return Status::OK();
 }

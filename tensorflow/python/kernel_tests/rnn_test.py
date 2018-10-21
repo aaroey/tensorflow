@@ -36,6 +36,8 @@ from tensorflow.python.framework import ops as ops_lib
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.framework import test_util
 from tensorflow.python.keras import testing_utils
+from tensorflow.python.keras.engine import network as keras_network
+from tensorflow.python.layers import base as base_layers
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import gradients_impl
@@ -127,6 +129,28 @@ class TensorArrayStateRNNCell(rnn_cell_impl.RNNCell):
     return (input_, (state[0] + 1, new_array))
 
 
+class KerasNetworkTFRNNs(keras_network.Network):
+
+  def __init__(self, name=None):
+    super(KerasNetworkTFRNNs, self).__init__(name=name)
+    self._cell = rnn_cell_impl.MultiRNNCell(
+        [rnn_cell_impl.LSTMCell(1) for _ in range(2)])
+
+  def call(self, inputs):
+    return self._cell(inputs, self._cell.get_initial_state(inputs))
+
+
+class KerasNetworkKerasRNNs(keras_network.Network):
+
+  def __init__(self, name=None):
+    super(KerasNetworkKerasRNNs, self).__init__(name=name)
+    self._cell = keras.layers.StackedRNNCells(
+        [keras.layers.LSTMCell(1) for _ in range(2)])
+
+  def call(self, inputs):
+    return self._cell(inputs, self._cell.get_initial_state(inputs))
+
+
 class RNNTest(test.TestCase):
 
   def setUp(self):
@@ -197,7 +221,7 @@ class RNNTest(test.TestCase):
     else:
       inputs = array_ops.placeholder(dtypes.float32, shape=(1, 4, 1))
 
-    with self.test_session() as sess:
+    with self.cached_session(use_gpu=True) as sess:
       outputs, state = rnn.dynamic_rnn(
           cell, inputs, dtype=dtypes.float32, sequence_length=[4])
       if not in_eager_mode:
@@ -217,7 +241,7 @@ class RNNTest(test.TestCase):
     else:
       inputs = array_ops.placeholder(dtypes.float32, shape=(1, 4, 1))
 
-    with self.test_session() as sess:
+    with self.cached_session(use_gpu=True) as sess:
       outputs, state = rnn.dynamic_rnn(
           cell, inputs, dtype=dtypes.float32, sequence_length=[4])
       if not in_eager_mode:
@@ -246,7 +270,7 @@ class RNNTest(test.TestCase):
     else:
       inputs = array_ops.placeholder(dtypes.float32, shape=(1, 4, 1))
 
-    with self.test_session() as sess:
+    with self.cached_session(use_gpu=True) as sess:
       outputs, state = rnn.dynamic_rnn(
           cell, inputs, dtype=dtypes.float32, sequence_length=[4])
       state = (state[0], state[1].stack())
@@ -321,7 +345,7 @@ class RNNTest(test.TestCase):
     self._assert_cell_builds(contrib_rnn.IndyLSTMCell, f64, 5, 7, 3)
 
   def testRNNWithKerasSimpleRNNCell(self):
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       input_shape = 10
       output_shape = 5
       timestep = 4
@@ -354,7 +378,7 @@ class RNNTest(test.TestCase):
       self.assertEqual(len(state), batch)
 
   def testRNNWithKerasGRUCell(self):
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       input_shape = 10
       output_shape = 5
       timestep = 4
@@ -387,7 +411,7 @@ class RNNTest(test.TestCase):
       self.assertEqual(len(state), batch)
 
   def testRNNWithKerasLSTMCell(self):
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       input_shape = 10
       output_shape = 5
       timestep = 4
@@ -424,7 +448,7 @@ class RNNTest(test.TestCase):
       self.assertEqual(len(state[1]), batch)
 
   def testRNNWithStackKerasCell(self):
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       input_shape = 10
       output_shape = 5
       timestep = 4
@@ -465,7 +489,7 @@ class RNNTest(test.TestCase):
         self.assertEqual(len(s), batch)
 
   def testStaticRNNWithKerasSimpleRNNCell(self):
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       input_shape = 10
       output_shape = 5
       timestep = 4
@@ -516,7 +540,7 @@ class RNNTest(test.TestCase):
     fix_weights_generator.build((None, input_shape))
     weights = fix_weights_generator.get_weights()
 
-    with self.test_session(graph=ops_lib.Graph()) as sess:
+    with self.session(graph=ops_lib.Graph()) as sess:
       inputs = array_ops.placeholder(
           dtypes.float32, shape=(None, timestep, input_shape))
       cell = keras.layers.SimpleRNNCell(output_shape)
@@ -524,7 +548,7 @@ class RNNTest(test.TestCase):
           cell, inputs, dtype=dtypes.float32)
       cell.set_weights(weights)
       [tf_out, tf_state] = sess.run([tf_out, tf_state], {inputs: x_train})
-    with self.test_session(graph=ops_lib.Graph()) as sess:
+    with self.session(graph=ops_lib.Graph()) as sess:
       k_input = keras.Input(shape=(timestep, input_shape),
                             dtype=dtypes.float32)
       cell = keras.layers.SimpleRNNCell(output_shape)
@@ -535,8 +559,47 @@ class RNNTest(test.TestCase):
     self.assertAllClose(tf_out, k_out)
     self.assertAllClose(tf_state, k_state)
 
+  def testSimpleRNNCellAndBasicRNNCellComparison(self):
+    input_shape = 10
+    output_shape = 5
+    timestep = 4
+    batch = 20
+    (x_train, _), _ = testing_utils.get_test_data(
+        train_samples=batch,
+        test_samples=0,
+        input_shape=(timestep, input_shape),
+        num_classes=output_shape)
+    fix_weights_generator = keras.layers.SimpleRNNCell(output_shape)
+    fix_weights_generator.build((None, input_shape))
+    # The SimpleRNNCell contains 3 weights: kernel, recurrent_kernel, and bias
+    # The BasicRNNCell contains 2 weight: kernel and bias, where kernel is
+    # zipped [kernel, recurrent_kernel] in SimpleRNNCell.
+    keras_weights = fix_weights_generator.get_weights()
+    kernel, recurrent_kernel, bias = keras_weights
+    tf_weights = [np.concatenate((kernel, recurrent_kernel)), bias]
+
+    with self.session(graph=ops_lib.Graph()) as sess:
+      inputs = array_ops.placeholder(
+          dtypes.float32, shape=(None, timestep, input_shape))
+      cell = keras.layers.SimpleRNNCell(output_shape)
+      k_out, k_state = rnn.dynamic_rnn(
+          cell, inputs, dtype=dtypes.float32)
+      cell.set_weights(keras_weights)
+      [k_out, k_state] = sess.run([k_out, k_state], {inputs: x_train})
+    with self.session(graph=ops_lib.Graph()) as sess:
+      inputs = array_ops.placeholder(
+          dtypes.float32, shape=(None, timestep, input_shape))
+      cell = rnn_cell_impl.BasicRNNCell(output_shape)
+      tf_out, tf_state = rnn.dynamic_rnn(
+          cell, inputs, dtype=dtypes.float32)
+      cell.set_weights(tf_weights)
+      [tf_out, tf_state] = sess.run([tf_out, tf_state], {inputs: x_train})
+
+    self.assertAllClose(tf_out, k_out, atol=1e-5)
+    self.assertAllClose(tf_state, k_state, atol=1e-5)
+
   def testBasicLSTMCellInterchangeWithLSTMCell(self):
-    with self.test_session(graph=ops_lib.Graph()) as sess:
+    with self.session(graph=ops_lib.Graph()) as sess:
       basic_cell = rnn_cell_impl.BasicLSTMCell(1)
       basic_cell(array_ops.ones([1, 1]),
                  state=basic_cell.get_initial_state(inputs=None,
@@ -548,7 +611,7 @@ class RNNTest(test.TestCase):
       prefix = os.path.join(self.get_temp_dir(), "ckpt")
       save_path = save.save(sess, prefix)
 
-    with self.test_session(graph=ops_lib.Graph()) as sess:
+    with self.session(graph=ops_lib.Graph()) as sess:
       lstm_cell = rnn_cell_impl.LSTMCell(1, name="basic_lstm_cell")
       lstm_cell(array_ops.ones([1, 1]),
                 state=lstm_cell.get_initial_state(inputs=None,
@@ -567,7 +630,7 @@ class RNNTest(test.TestCase):
         rnn_cell_impl.GRUCell(
             32, kernel_initializer="ones", dtype=dtypes.float32)
     ]:
-      with self.test_session():
+      with self.cached_session():
         x = keras.Input((None, 5))
         layer = keras.layers.RNN(cell)
         y = layer(x)
@@ -595,6 +658,31 @@ class RNNTest(test.TestCase):
         model.set_weights(weights)
         y_np_2 = model.predict(x_np)
         self.assertAllClose(y_np, y_np_2, atol=1e-4)
+
+  def testRNNCellActsLikeKerasRNNCellInProperScope(self):
+    with base_layers.keras_style_scope():
+      kn1 = KerasNetworkTFRNNs(name="kn1")
+      kn2 = KerasNetworkKerasRNNs(name="kn2")
+
+      z = array_ops.zeros((2, 3))
+
+      kn1(z)
+      kn2(z)
+
+      # pylint: disable=protected-access
+      self.assertTrue(all("kn1" in v.name for v in kn1._cell.variables))
+      self.assertTrue(all("kn2" in v.name for v in kn2._cell.variables))
+
+      kn1_new = KerasNetworkTFRNNs(name="kn1_new")
+      kn2_new = KerasNetworkKerasRNNs(name="kn2_new")
+
+      kn2_new(z)
+      # Most importantly, this doesn't fail due to variable scope reuse issues.
+      kn1_new(z)
+
+      self.assertTrue(all("kn1_new" in v.name for v in kn1_new._cell.variables))
+      self.assertTrue(all("kn2_new" in v.name for v in kn2_new._cell.variables))
+
 
 ######### Benchmarking RNN code
 

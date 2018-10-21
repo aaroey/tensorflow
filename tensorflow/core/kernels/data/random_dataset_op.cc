@@ -21,10 +21,10 @@ limitations under the License.
 #include "tensorflow/core/lib/random/random_distributions.h"
 
 namespace tensorflow {
-
+namespace data {
 namespace {
 
-// See documentation in ../ops/dataset_ops.cc for a high-level
+// See documentation in ../../ops/dataset_ops.cc for a high-level
 // description of the following op.
 
 class RandomDatasetOp : public DatasetOpKernel {
@@ -151,5 +151,5 @@ REGISTER_KERNEL_BUILDER(Name("RandomDataset").Device(DEVICE_CPU),
                         RandomDatasetOp);
 
 }  // namespace
-
+}  // namespace data
 }  // namespace tensorflow

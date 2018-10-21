@@ -43,6 +43,24 @@ cc_library(
         "compatibility.h",
         "types.h",
     ],
+    deps = [
+        "//tensorflow/contrib/lite/kernels:op_macros",
+        "@com_google_absl//absl/base:core_headers",
+    ],
+)
+
+cc_library(
+    name = "legacy_types",
+    srcs = [],
+    hdrs = [
+        "compatibility.h",
+        "legacy_types.h",
+        "types.h",
+    ],
+    deps = [
+        "//tensorflow/contrib/lite/kernels:op_macros",
+        "@com_google_absl//absl/base:core_headers",
+    ],
 )
 
 config_setting(
@@ -163,7 +181,7 @@ cc_library(
         ":tensor_utils",
         "//third_party/eigen3",
         "@gemmlowp",
-        "//tensorflow/contrib/lite:builtin_op_data",
+        "//tensorflow/contrib/lite/c:c_api_internal",
     ] + select({
         ":haswell": tflite_deps_intel,
         ":ios_x86_64": tflite_deps_intel,
@@ -194,11 +212,12 @@ cc_library(
         ":strided_slice_logic",
         ":tensor_utils",
         ":types",
+        ":legacy_types",
         ":legacy_reference_base",
         ":round",
         "//third_party/eigen3",
         "@gemmlowp",
-        "//tensorflow/contrib/lite:builtin_op_data",
+        "//tensorflow/contrib/lite/c:c_api_internal",
     ] + select({
         ":haswell": tflite_deps_intel,
         ":ios_x86_64": tflite_deps_intel,
@@ -220,13 +239,15 @@ cc_library(
         "optimized/eigen_spatial_convolutions.h",
         "optimized/eigen_tensor_reduced_instantiations_oss.h",
         "optimized/multithreaded_conv.h",
+        # FIXME(petewarden) - This should be removed, since it's a header from the
+        # :tensor dependency below.
         "tensor.h",
     ],
     deps = [
         ":optimized_base",
+        ":tensor",
         ":types",
-        "//tensorflow/contrib/lite:builtin_op_data",
-        "//tensorflow/contrib/lite:context",
+        "//tensorflow/contrib/lite/c:c_api_internal",
         "//third_party/eigen3",
     ],
 )
@@ -236,7 +257,7 @@ cc_test(
     srcs = ["tensor_test.cc"],
     tags = ["no_oss"],
     deps = [
-        ":reference",
+        ":tensor",
         "@com_google_googletest//:gtest",
     ],
 )
@@ -257,6 +278,7 @@ cc_library(
     deps = [
         ":round",
         ":types",
+        "//tensorflow/contrib/lite/kernels:op_macros",
     ],
 )
 
@@ -288,7 +310,9 @@ cc_library(
         "common.h",
         "reference/depthwiseconv_float.h",
         "reference/depthwiseconv_uint8.h",
+        "reference/fully_connected.h",
         "reference/reference_ops.h",
+        "reference/softmax.h",
     ],
     deps = [
         ":quantization_util",
@@ -296,7 +320,8 @@ cc_library(
         ":strided_slice_logic",
         ":types",
         "@gemmlowp",
-        "//tensorflow/contrib/lite:builtin_op_data",
+        "//tensorflow/contrib/lite/c:c_api_internal",
+        "//tensorflow/contrib/lite/kernels:op_macros",
     ] + select({
         ":haswell": tflite_deps_intel,
         ":ios_x86_64": tflite_deps_intel,
@@ -317,16 +342,20 @@ cc_library(
         "common.h",
         "reference/depthwiseconv_float.h",
         "reference/depthwiseconv_uint8.h",
+        "reference/fully_connected.h",
         "reference/legacy_reference_ops.h",
         "reference/reference_ops.h",
+        "reference/softmax.h",
     ],
     deps = [
         ":quantization_util",
         ":round",
         ":strided_slice_logic",
+        ":legacy_types",
         ":types",
         "@gemmlowp",
-        "//tensorflow/contrib/lite:builtin_op_data",
+        "//tensorflow/contrib/lite/c:c_api_internal",
+        "//tensorflow/contrib/lite/kernels:op_macros",
     ] + select({
         ":haswell": tflite_deps_intel,
         ":ios_x86_64": tflite_deps_intel,
@@ -341,11 +370,27 @@ cc_library(
 )
 
 cc_library(
-    name = "reference",
-    hdrs = ["tensor.h"],
+    name = "tensor",
+    hdrs = [
+        "tensor.h",
+        "tensor_ctypes.h",
+    ],
     deps = [
         ":types",
-        "//tensorflow/contrib/lite:context",
+        "//tensorflow/contrib/lite/c:c_api_internal",
+    ],
+)
+
+# Deprecated version of :tensor, kept for backwards compatibility.
+cc_library(
+    name = "reference",
+    hdrs = [
+        "tensor.h",
+        "tensor_ctypes.h",
+    ],
+    deps = [
+        ":types",
+        "//tensorflow/contrib/lite/c:c_api_internal",
     ],
 )
 
@@ -359,7 +404,7 @@ cc_library(
     ],
     deps = [
         ":round",
-        "//tensorflow/contrib/lite:builtin_op_data",
+        "//tensorflow/contrib/lite/c:c_api_internal",
         "//tensorflow/contrib/lite/kernels:activation_functor",
         "//tensorflow/contrib/lite/kernels:op_macros",
     ],
@@ -384,7 +429,7 @@ cc_library(
         ":cpu_check",
         ":round",
         ":types",
-        "//tensorflow/contrib/lite:builtin_op_data",
+        "//tensorflow/contrib/lite/c:c_api_internal",
         "//tensorflow/contrib/lite/kernels:activation_functor",
         "//tensorflow/contrib/lite/kernels:op_macros",
         "@arm_neon_2_x86_sse",
@@ -398,7 +443,7 @@ cc_library(
     hdrs = ["kernel_utils.h"],
     deps = [
         ":tensor_utils",
-        "//tensorflow/contrib/lite:builtin_op_data",
+        "//tensorflow/contrib/lite/c:c_api_internal",
     ],
 )
 
@@ -440,9 +485,10 @@ cc_library(
     ],
     copts = NEON_FLAGS_IF_APPLICABLE,
     deps = [
-        "//tensorflow/contrib/lite/kernels:activation_functor",
-        "//tensorflow/contrib/lite:builtin_op_data",
+        "@com_google_absl//absl/base:core_headers",
+        "//tensorflow/contrib/lite/c:c_api_internal",
         "@arm_neon_2_x86_sse",
+        "//tensorflow/contrib/lite/kernels:op_macros",
         "@gemmlowp",
     ] + select({
         ":arm": [
@@ -517,7 +563,7 @@ cc_test(
     ],
     deps = [
         ":tensor_utils",
-        "//tensorflow/contrib/lite:builtin_op_data",
+        "//tensorflow/contrib/lite/c:c_api_internal",
         "//tensorflow/contrib/lite/kernels:test_util",
         "@com_google_googletest//:gtest_main",
     ],
@@ -555,6 +601,22 @@ cc_test(
 cc_test(
     name = "resize_bilinear_test",
     srcs = ["resize_bilinear_test.cc"],
+    tags = [
+        "no_oss",
+        "tflite_not_portable",
+    ],
+    deps = [
+        ":optimized_base",
+        ":reference_base",
+        ":test_util",
+        ":types",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "resize_nearest_neighbor_test",
+    srcs = ["resize_nearest_neighbor_test.cc"],
     tags = [
         "no_oss",
         "tflite_not_portable",

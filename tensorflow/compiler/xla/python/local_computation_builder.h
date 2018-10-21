@@ -51,8 +51,8 @@ Status TransferToInfeedLocalReplica(const Literal& literal, int replica_number);
 // Transfers a literal of the given shape from the outfeed of the given replica.
 //
 // The replica number is resolved to an appropriate device ordinal.
-StatusOr<std::unique_ptr<Literal> > TransferFromOutfeedLocalReplica(
-    const Shape& shape, int replica_number);
+StatusOr<Literal> TransferFromOutfeedLocalReplica(const Shape& shape,
+                                                  int replica_number);
 
 // Wraps a ScopedShapedBuffer produced by copying a literal "to
 // device," i.e. copying a literal to a scoped buffer via the local
@@ -65,7 +65,7 @@ class LocalShapedBuffer {
   LocalShapedBuffer(ScopedShapedBuffer shaped_buffer);
   const ScopedShapedBuffer* shaped_buffer() const;
 
-  StatusOr<std::unique_ptr<Literal> > ToLiteral() const;
+  StatusOr<Literal> ToLiteral() const;
 
   // Transfers ownership of the encapsulated ShapedBuffer to the caller,
   // analogous to std::unique_ptr::release().
@@ -117,7 +117,7 @@ class CompiledLocalComputation {
   // with optionally-specified argument layouts. The literals will be
   // re-laid out according to the corresponding elements of
   // shapes_with_layout.
-  StatusOr<std::unique_ptr<Literal> > Execute(
+  StatusOr<Literal> Execute(
       const std::vector<Literal>& arguments,
       const std::vector<absl::optional<Shape> >& shapes_with_layout);
 
@@ -183,6 +183,9 @@ class LocalComputationBuilder {
   // Returns an owned LocalComputation to the caller on success.
   StatusOr<LocalComputation*> Build();
 
+  // Returns an owned LocalComputation to the caller on success with given root.
+  StatusOr<LocalComputation*> BuildWithRoot(const LocalOp& root);
+
   LocalOp Parameter(int64 parameter_number, const Shape& shape,
                     const string& name);
 
@@ -200,6 +203,9 @@ class LocalComputationBuilder {
 
   LocalOp Broadcast(const LocalOp& operand,
                     absl::Span<const int64> broadcast_sizes);
+
+  LocalOp BroadcastInDim(const LocalOp& operand, const Shape& shape,
+                         absl::Span<const int64> broadcast_dimensions);
 
   LocalOp Pad(const LocalOp& operand, const LocalOp& padding_value,
               const PaddingConfig& padding_config);
@@ -248,7 +254,8 @@ class LocalComputationBuilder {
       absl::Span<const std::pair<int64, int64> > padding,
       absl::Span<const int64> lhs_dilation,
       absl::Span<const int64> rhs_dilation,
-      const ConvolutionDimensionNumbers& dimension_numbers);
+      const ConvolutionDimensionNumbers& dimension_numbers,
+      int64 feature_group_count);
 
   LocalOp ConvertElementType(const LocalOp& operand,
                              PrimitiveType new_element_type);
@@ -277,6 +284,8 @@ class LocalComputationBuilder {
       const LocalComputation& local_computation,
       absl::Span<const int64> window_dimensions,
       absl::Span<const int64> window_strides,
+      absl::Span<const int64> base_dilations,
+      absl::Span<const int64> window_dilations,
       absl::Span<const std::pair<int64, int64> > padding);
 
   LocalOp RngNormal(const LocalOp& mu, const LocalOp& sigma,

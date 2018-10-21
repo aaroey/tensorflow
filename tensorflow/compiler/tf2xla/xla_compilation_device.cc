@@ -76,12 +76,11 @@ class XlaCompilationAllocator : public Allocator {
 
 XlaCompilationDevice::XlaCompilationDevice(const SessionOptions& options,
                                            DeviceType type)
-    : LocalDevice(
-          options,
-          Device::BuildDeviceAttributes(
-              strings::StrCat("/device:", type.type(), ":0"), type,
-              Bytes(256 << 20), DeviceLocality(),
-              strings::StrCat("device: XLA compilation device ", type.type()))),
+    : LocalDevice(options, Device::BuildDeviceAttributes(
+                               absl::StrCat("/device:", type.type(), ":0"),
+                               type, Bytes(256 << 20), DeviceLocality(),
+                               absl::StrCat("device: XLA compilation device ",
+                                            type.type()))),
       allocator_(new XlaCompilationAllocator()) {}
 
 XlaCompilationDevice::~XlaCompilationDevice() {}
@@ -93,7 +92,7 @@ Allocator* XlaCompilationDevice::GetAllocator(AllocatorAttributes attr) {
 void XlaCompilationDevice::Compute(OpKernel* op_kernel,
                                    OpKernelContext* context) {
   VLOG(4) << "XlaCompilationDevice::Compute "
-          << SummarizeNodeDef(op_kernel->def());
+          << FormatNodeDefForError(op_kernel->def());
   auto* b = XlaContext::Get(context).builder();
   xla::OpMetadata metadata;
   metadata.set_op_type(op_kernel->type_string());

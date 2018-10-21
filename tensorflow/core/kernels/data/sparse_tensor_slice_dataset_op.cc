@@ -21,10 +21,10 @@ limitations under the License.
 #include "tensorflow/core/util/sparse/sparse_tensor.h"
 
 namespace tensorflow {
-
+namespace data {
 namespace {
 
-// See documentation in ../ops/dataset_ops.cc for a high-level
+// See documentation in ../../ops/dataset_ops.cc for a high-level
 // description of the following op.
 
 template <typename T>
@@ -274,5 +274,5 @@ TF_CALL_DATASET_TYPES(REGISTER_DATASET_KERNEL);
 #undef REGISTER_DATASET_KERNEL
 
 }  // namespace
-
+}  // namespace data
 }  // namespace tensorflow

@@ -22,6 +22,7 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/tf2xla/xla_op_registry.h"
 #include "tensorflow/compiler/xla/client/client_library.h"
 #include "tensorflow/compiler/xla/client/xla_computation.h"
@@ -40,7 +41,6 @@ limitations under the License.
 #include "tensorflow/core/lib/core/refcount.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/strings/proto_serialization.h"
-#include "tensorflow/core/lib/strings/strcat.h"
 #include "tensorflow/core/platform/fingerprint.h"
 #include "tensorflow/core/platform/types.h"
 
@@ -70,7 +70,7 @@ Status CompilationCacheKey(const xrt::XLAComputation& computation,
   string serialized;
   TF_RET_CHECK(SerializeToStringDeterministic(computation, &serialized));
   uint64 fingerprint = Fingerprint64(serialized);
-  *key = strings::StrCat(fingerprint);
+  *key = absl::StrCat(fingerprint);
   return Status::OK();
 }
 
@@ -166,10 +166,22 @@ void XRTCompileOp::Compute(OpKernelContext* ctx) {
                  VLOG(1) << "Compiling XLA executable";
                  return Compile(ctx, computation_proto, program);
                }));
+  std::unique_ptr<XRTCompilationCacheEntryRef> entry;
+  OP_REQUIRES_OK(ctx, cache->Lookup(uid, &entry));
 
-  Tensor output(DT_INT64, TensorShape({}));
-  output.scalar<int64>()() = uid;
-  ctx->set_output(0, output);
+  Tensor handle_output(DT_INT64, TensorShape({}));
+  handle_output.scalar<int64>()() = uid;
+  ctx->set_output(0, handle_output);
+
+  xla::LocalExecutable* executable = entry->get().get_executable();
+  xla::ProgramShape program_shape = executable->executable()
+                                        ->module()
+                                        .config()
+                                        .entry_computation_layout()
+                                        .ComputeProgramShape();
+  Tensor program_shape_output(DT_STRING, TensorShape({1}));
+  program_shape_output.vec<string>()(0) = program_shape.SerializeAsString();
+  ctx->set_output(1, program_shape_output);
 }
 
 XRTCompileOp::~XRTCompileOp() = default;
