@@ -2,7 +2,7 @@
 set -ex
 
 # Prerequisites: install tensorflow with version >=1.12
-WORK_DIR=/tmp/trt_saved_model
+WORK_DIR=/tmp/trt_saved_model_resnet50
 
 run_server() {
   local saved_model_name=20180601_resnet_v2_imagenet_savedmodel
@@ -62,9 +62,7 @@ trt.create_inference_graph(
 
 run_client() {
   curl -O https://raw.githubusercontent.com/aaroey/tensorflow/trt_savedmodel_example/trt_savedmodel_example/serve_trt_saved_model_resnet50_client.py
-  python serve_trt_saved_model_resnet50_client.py \
-    --num_tests=10 \
-    --server=127.0.0.1:8500
+  python serve_trt_saved_model_resnet50_client.py
 }
 
 mkdir -p $WORK_DIR
@@ -76,7 +74,7 @@ if [[ "$mode" == "server" ]]; then
   run_server "$@"
 elif [[ "$mode" == "client" ]]; then
   run_client "$@"
-elif [[ "$mode" == "clean" ]]; then
+elif [[ "$mode" == "clear" ]]; then
   rm -rf $WORK_DIR
 else
   echo "Usage: serve_trt_saved_model_resnet50.sh server|client|clean"
