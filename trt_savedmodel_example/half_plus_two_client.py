@@ -1,3 +1,4 @@
+# Search for half_plus_two_client.py and that is where this file was copied from
 import numpy as np
 import grpc
 import tensorflow as tf
