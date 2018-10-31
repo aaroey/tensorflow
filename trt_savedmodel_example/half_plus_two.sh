@@ -6,7 +6,9 @@ WORK_DIR=/tmp/trt_saved_model_half_plus_two
 
 run_server() {
   local saved_model_path=$WORK_DIR/saved_model
-  rm -rf $saved_model_path*
+  local trt_saved_model_path=$WORK_DIR/saved_model_trt
+  mkdir -p $saved_model_path $trt_saved_model_path
+  rm -rf $saved_model_path* $trt_saved_model_path
 
   curl -O \
     https://raw.githubusercontent.com/tensorflow/tensorflow/master/tensorflow/examples/saved_model/saved_model_half_plus_two.py
@@ -17,9 +19,7 @@ run_server() {
     --output_dir_pbtxt=${saved_model_path}_pbtxt \
     --output_dir_main_op=${saved_model_path}_main_op
 
-  local trt_saved_model_path=$WORK_DIR/saved_model_trt
-  if ! [[ -f $trt_saved_model_path/saved_model.pb ]]; then
-    python <<< "
+  python <<< "
 import tensorflow.contrib.tensorrt as trt
 trt.create_inference_graph(
     None,
@@ -28,7 +28,6 @@ trt.create_inference_graph(
     input_saved_model_dir='$saved_model_path',
     output_saved_model_dir='$trt_saved_model_path/1')  # Hard coded version 1
 "
-  fi
 
   local tag=''
   if [[ "$1" == 'nightly' ]]; then

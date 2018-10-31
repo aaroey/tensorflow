@@ -9,15 +9,14 @@ run_server() {
   local saved_model_url=http://download.tensorflow.org/models/official/$saved_model_name.tar.gz
   local saved_model_path=$WORK_DIR/$saved_model_name
   local trt_saved_model_path=${saved_model_path}_trt
+  mkdir -p $saved_model_path $trt_saved_model_path
+  rm -rf $saved_model_path $trt_saved_model_path
 
-  if ! [[ -d $saved_model_path ]]; then
-    curl -O $saved_model_url
-    tar zxf $saved_model_name.tar.gz
-  fi
+  curl -O $saved_model_url
+  tar zxf $saved_model_name.tar.gz
 
-  if ! [[ -f $trt_saved_model_path/1/saved_model.pb ]]; then
-    local saved_model_path_with_version="$(echo $saved_model_path/*)"
-    python <<< "
+  local saved_model_path_with_version="$(echo $saved_model_path/*)"
+  python <<< "
 import tensorflow.contrib.tensorrt as trt
 trt.create_inference_graph(
     None,
@@ -26,7 +25,6 @@ trt.create_inference_graph(
     input_saved_model_dir='$saved_model_path_with_version',
     output_saved_model_dir='$trt_saved_model_path/1')  # Hard coded version 1
 "
-  fi
 
   local tag=''
   if [[ "$1" == 'local' ]]; then
