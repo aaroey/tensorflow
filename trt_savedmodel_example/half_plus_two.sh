@@ -1,5 +1,4 @@
 #!/bin/bash
-#!/bin/bash
 set -ex
 
 # Prerequisites: install tensorflow with version >=1.12
@@ -46,8 +45,8 @@ trt.create_inference_graph(
 }
 
 run_client() {
-  curl -O https://raw.githubusercontent.com/aaroey/tensorflow/trt_savedmodel_example/trt_savedmodel_example/serve_trt_saved_model_half_plus_two_client.py
-  python serve_trt_saved_model_half_plus_two_client.py
+  curl -O https://raw.githubusercontent.com/aaroey/tensorflow/trt_savedmodel_example/trt_savedmodel_example/half_plus_two_client.py
+  python half_plus_two_client.py
 }
 
 mkdir -p $WORK_DIR
@@ -62,5 +61,5 @@ elif [[ "$mode" == "client" ]]; then
 elif [[ "$mode" == "clean" ]]; then
   rm -rf $WORK_DIR
 else
-  echo "Usage: serve_trt_saved_model_half_plus_two.sh server|client|clean"
+  echo "Usage: half_plus_two.sh server|client|clean"
 fi

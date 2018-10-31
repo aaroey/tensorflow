@@ -34,7 +34,7 @@ def send_classification_request(stub, model_name, signature_name, input_name,
   response = stub.Classify(request)
   classes = response.result.classifications[0].classes
   for c in classes:
-    print('regression result: label=' + str(c.label) + ', score=' +
+    print('classification result: label=' + str(c.label) + ', score=' +
           str(c.score))
 
 

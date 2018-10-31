@@ -61,8 +61,8 @@ trt.create_inference_graph(
 }
 
 run_client() {
-  curl -O https://raw.githubusercontent.com/aaroey/tensorflow/trt_savedmodel_example/trt_savedmodel_example/serve_trt_saved_model_resnet50_client.py
-  python serve_trt_saved_model_resnet50_client.py
+  curl -O https://raw.githubusercontent.com/aaroey/tensorflow/trt_savedmodel_example/trt_savedmodel_example/resnet50_client.py
+  python resnet50_client.py
 }
 
 mkdir -p $WORK_DIR
@@ -77,5 +77,5 @@ elif [[ "$mode" == "client" ]]; then
 elif [[ "$mode" == "clear" ]]; then
   rm -rf $WORK_DIR
 else
-  echo "Usage: serve_trt_saved_model_resnet50.sh server|client|clean"
+  echo "Usage: resnet50.sh server|client|clean"
 fi
