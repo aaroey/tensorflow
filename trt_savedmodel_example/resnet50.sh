@@ -5,8 +5,8 @@ set -ex
 WORK_DIR=/tmp/trt_saved_model_resnet50
 
 run_server() {
-  local saved_model_name=20180601_resnet_v2_imagenet_savedmodel
-  local saved_model_url=http://download.tensorflow.org/models/official/$saved_model_name.tar.gz
+  local saved_model_name=resnet_v2_fp32_savedmodel_NCHW
+  local saved_model_url=http://download.tensorflow.org/models/official/20181001_resnet/savedmodels/resnet_v2_fp32_savedmodel_NCHW.tar.gz
   local saved_model_path=$WORK_DIR/$saved_model_name
   local trt_saved_model_path=${saved_model_path}_trt
   mkdir -p $saved_model_path $trt_saved_model_path
