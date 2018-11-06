@@ -3,6 +3,7 @@ from io import BytesIO
 import numpy as np
 import grpc
 import requests
+import time
 import tensorflow as tf
 from tensorflow_serving.apis import predict_pb2
 from tensorflow_serving.apis import prediction_service_pb2_grpc
@@ -10,11 +11,12 @@ from tensorflow_serving.apis import prediction_service_pb2_grpc
 tf.app.flags.DEFINE_string('model_name', 'mymodel',
                            'Name of the model being served')
 tf.app.flags.DEFINE_string('server', 'localhost:8500', 'Model server address')
+tf.app.flags.DEFINE_integer('batch_size', 1, 'Batch size of each request')
 FLAGS = tf.app.flags.FLAGS
 
 IMAGE_URL = 'https://tensorflow.org/images/blogs/serving/cat.jpg'
 IMAGE_SIZE = 224
-
+NUM_REQUESTS = 10
 
 # These are the means of each channel that the input image data need to
 # subtract.
@@ -28,9 +30,10 @@ def main(_):
   response = requests.get(IMAGE_URL)
   img = Image.open(BytesIO(response.content))
   img = img.resize((IMAGE_SIZE, IMAGE_SIZE))
-  input_shape = [1, IMAGE_SIZE, IMAGE_SIZE, 3]
-  img_data = np.array(img.getdata()).reshape(input_shape).astype(np.float32)
+  img_shape = [1, IMAGE_SIZE, IMAGE_SIZE, 3]
+  img_data = np.array(img.getdata()).reshape(img_shape).astype(np.float32)
   img_data -= _CHANNEL_MEANS
+  img_data = img_data.repeat(FLAGS.batch_size, axis=0)
 
   channel = grpc.insecure_channel(FLAGS.server)
   stub = prediction_service_pb2_grpc.PredictionServiceStub(channel)
@@ -40,13 +43,26 @@ def main(_):
   request.model_spec.signature_name = 'predict'
   request.inputs['input'].CopyFrom(
       tf.contrib.util.make_tensor_proto(
-          img_data.astype(np.float32), shape=input_shape))
-  response = stub.Predict(request)
-  predicted_label = np.array(response.outputs['classes'].int64_val)[0]
+          img_data.astype(np.float32),
+          shape=[FLAGS.batch_size] + img_shape[1:]))
+
+  # Wramup runs.
+  for _ in range(5):
+    response = stub.Predict(request)
+
+  t_start = time.time()
+  for _ in range(NUM_REQUESTS):
+    response = stub.Predict(request)
+  duration = time.time() - t_start
+
+  predicted_label = np.array(response.outputs['classes'].int64_val)
 
   # The result should be 286 which is 'cougar, puma, catamount, mountain lion,
   # painter, panther, Felis concolor' accoridng to imagenet category.
   print('prediction result: ' + str(predicted_label))
+  print('batch size: ' + str(FLAGS.batch_size))
+  print('number of requests: ' + str(NUM_REQUESTS))
+  print('duration (seconds) per request: ' + str(duration / NUM_REQUESTS))
 
 
 if __name__ == '__main__':

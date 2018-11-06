@@ -15,16 +15,24 @@ run_server() {
   curl -O $saved_model_url
   tar zxf $saved_model_name.tar.gz
 
-  local saved_model_path_with_version="$(echo $saved_model_path/*)"
-  python <<< "
+  local use_trt=${USE_TRT:-'true'}
+  local batch_size=${BATCH_SIZE:-1}
+  local saved_model_path_to_serve="$saved_model_path"
+  if [[ "${use_trt}" == 'true' ]]; then
+    saved_model_path_to_serve="$trt_saved_model_path"
+    local saved_model_path_with_version="$(echo $saved_model_path/*)"
+    python <<< "
 import tensorflow.contrib.tensorrt as trt
 trt.create_inference_graph(
     None,
     None,
-    max_batch_size=128,
+    max_batch_size=$batch_size,
     input_saved_model_dir='$saved_model_path_with_version',
     output_saved_model_dir='$trt_saved_model_path/1')  # Hard coded version 1
 "
+  fi
+  echo "use_trt = $use_trt"
+  echo "batch_size = $batch_size"
 
   local tag=''
   if [[ "$1" == 'local' ]]; then
@@ -54,13 +62,13 @@ trt.create_inference_graph(
   # command, and attach to it via `docker exec -i -t <container id> /bin/bash`
   # and then `gdb`.
   docker run --cap-add=SYS_PTRACE --runtime=nvidia -p 8500:8500 \
-    --mount type=bind,source="$trt_saved_model_path",target=/models/mymodel \
+    --mount type=bind,source="$saved_model_path_to_serve",target=/models/mymodel \
     -e MODEL_NAME=mymodel -t $tag &
 }
 
 run_client() {
   curl -O https://raw.githubusercontent.com/aaroey/tensorflow/trt_savedmodel_example/trt_savedmodel_example/resnet50_client.py
-  python resnet50_client.py
+  python resnet50_client.py --batch_size=${BATCH_SIZE:-1}
 }
 
 mkdir -p $WORK_DIR
