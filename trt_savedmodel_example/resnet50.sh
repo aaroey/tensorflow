@@ -31,11 +31,11 @@ trt.create_inference_graph(
     output_saved_model_dir='$trt_saved_model_path/1')  # Hard coded version 1
 "
   fi
-  echo "use_trt = $use_trt"
-  echo "batch_size = $batch_size"
+  echo "----------------------------> use_trt = $use_trt"
+  echo "----------------------------> batch_size = $batch_size"
 
-  local tag=''
-  if [[ "$1" == 'local' ]]; then
+  local tag="${1:-latest}"
+  if [[ "$tag" == 'local' ]]; then
     curl -O https://raw.githubusercontent.com/tensorflow/serving/master/tensorflow_serving/tools/docker/Dockerfile.devel-gpu
     curl -O https://raw.githubusercontent.com/tensorflow/serving/master/tensorflow_serving/tools/docker/Dockerfile.gpu
     docker build --pull -t my-tf-serving-trt-tf-head-env \
@@ -46,11 +46,8 @@ trt.create_inference_graph(
       -f Dockerfile.gpu \
       .
     tag=my-tf-serving-trt-devel
-  elif [[ "$1" == 'nightly' ]]; then
-    tag=tensorflow/serving:nightly-gpu
-    docker pull $tag
   else
-    tag=tensorflow/serving:latest-gpu
+    tag="tensorflow/serving:${tag}-gpu"
     docker pull $tag
   fi
 
