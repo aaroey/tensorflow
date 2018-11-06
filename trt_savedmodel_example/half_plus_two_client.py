@@ -68,8 +68,11 @@ def main(_):
   # (the joint part only contains Const nodes) into same engine, causing that
   # any output of the engine depends on inputs of both subgraphs, while
   # theoretically only input for the same subgraph is required.
-  # send_predict_request(stub, FLAGS.model_name, 'serving_default', 'x',
-  #                      FLAGS.x_value)
+  #
+  # As a result, sending request to 'serving_default' below with TRT-converted
+  # model will fail, but will work fine with original model.
+  send_predict_request(stub, FLAGS.model_name, 'serving_default', 'x',
+                       FLAGS.x_value)
 
 
 if __name__ == '__main__':

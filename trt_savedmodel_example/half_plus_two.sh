@@ -13,21 +13,25 @@ run_server() {
   curl -O \
     https://raw.githubusercontent.com/tensorflow/tensorflow/master/tensorflow/examples/saved_model/saved_model_half_plus_two.py
 
-  python saved_model_half_plus_two.py            \
-    --device=gpu                                 \
-    --output_dir=$saved_model_path               \
-    --output_dir_pbtxt=${saved_model_path}_pbtxt \
-    --output_dir_main_op=${saved_model_path}_main_op
+  python saved_model_half_plus_two.py              \
+    --device=gpu                                   \
+    --output_dir=$saved_model_path/1               \
+    --output_dir_pbtxt=${saved_model_path}_pbtxt/1 \
+    --output_dir_main_op=${saved_model_path}_main_op/1
 
-  python <<< "
+  local saved_model_path_to_serve="$saved_model_path"
+  if [[ "${USE_TRT:-'true'}" == 'true' ]]; then
+    saved_model_path_to_serve="$trt_saved_model_path"
+    python <<< "
 import tensorflow.contrib.tensorrt as trt
 trt.create_inference_graph(
     None,
     None,
     max_batch_size=1,
-    input_saved_model_dir='$saved_model_path',
+    input_saved_model_dir='$saved_model_path/1',
     output_saved_model_dir='$trt_saved_model_path/1')  # Hard coded version 1
 "
+  fi
 
   local tag=''
   if [[ "$1" == 'nightly' ]]; then
@@ -39,7 +43,7 @@ trt.create_inference_graph(
   fi
 
   docker run --runtime=nvidia -p 8500:8500 \
-    --mount type=bind,source="$trt_saved_model_path",target=/models/mymodel \
+    --mount type=bind,source="$saved_model_path_to_serve",target=/models/mymodel \
     -e MODEL_NAME=mymodel -t $tag &
 }
 
