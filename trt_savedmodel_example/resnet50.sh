@@ -5,32 +5,48 @@ set -ex
 WORK_DIR=/tmp/trt_saved_model_resnet50
 
 run_server() {
-  local saved_model_name=resnet_v2_fp32_savedmodel_NCHW
-  local saved_model_url=http://download.tensorflow.org/models/official/20181001_resnet/savedmodels/resnet_v2_fp32_savedmodel_NCHW.tar.gz
-  local saved_model_path=$WORK_DIR/$saved_model_name
-  local trt_saved_model_path=${saved_model_path}_trt
-  mkdir -p $saved_model_path $trt_saved_model_path
-  rm -rf $saved_model_path $trt_saved_model_path
+  # Should be one of:
+  # - resnet_v2_fp32_savedmodel_NCHW
+  # - resnet_v2_fp32_savedmodel_NCHW_jpg
+  # - resnet_v2_fp32_savedmodel_NHWC
+  # - resnet_v2_fp32_savedmodel_NHWC_jpg
+  local model=${MODEL:-resnet_v2_fp32_savedmodel_NCHW}
+  local saved_model_url=http://download.tensorflow.org/models/official/20181001_resnet/savedmodels/$model.tar.gz
+  local saved_model_path=$WORK_DIR/$model
+  mkdir -p $saved_model_path
 
-  curl -O $saved_model_url
-  tar zxf $saved_model_name.tar.gz
+  if ! [[ -f $model.tar.gz ]]; then
+    curl -O $saved_model_url
+    tar zxf $model.tar.gz
+  fi
 
   local use_trt=${USE_TRT:-'true'}
-  local batch_size=${BATCH_SIZE:-1}
   local saved_model_path_to_serve="$saved_model_path"
+
   if [[ "${use_trt}" == 'true' ]]; then
+    local batch_size=${BATCH_SIZE:-1}
+    local is_dynamic_op=${IS_DYNAMIC_OP:-False}
+    local trt_saved_model_path=${saved_model_path}_trt_batchsize${batch_size}_isdynamicop${is_dynamic_op}
     saved_model_path_to_serve="$trt_saved_model_path"
-    local saved_model_path_with_version="$(echo $saved_model_path/*)"
-    python <<< "
+    if ! [[ -f $trt_saved_model_path/1/saved_model.pb ]]; then
+      rm -rf $trt_saved_model_path
+      local saved_model_path_with_version="$(echo $saved_model_path/*)"
+
+      python <<< "
 import tensorflow.contrib.tensorrt as trt
 trt.create_inference_graph(
     None,
     None,
     max_batch_size=$batch_size,
+    is_dynamic_op=$is_dynamic_op,
+    # maximum_cached_engines=8,
+    # cached_engine_batch_sizes=[1, 2, 4, 8, 16, 32, 64, 128],
     input_saved_model_dir='$saved_model_path_with_version',
     output_saved_model_dir='$trt_saved_model_path/1')  # Hard coded version 1
 "
+    fi
   fi
+  echo "----------------------------> model = $model"
   echo "----------------------------> use_trt = $use_trt"
   echo "----------------------------> batch_size = $batch_size"
 
@@ -65,7 +81,10 @@ trt.create_inference_graph(
 
 run_client() {
   curl -O https://raw.githubusercontent.com/aaroey/tensorflow/trt_savedmodel_example/trt_savedmodel_example/resnet50_client.py
-  python resnet50_client.py --batch_size=${BATCH_SIZE:-1}
+
+  python resnet50_client.py \
+    --batch_size=${BATCH_SIZE:-1} \
+    --preprocess_image=${PREPROCESS_IMAGE:-True}
 }
 
 mkdir -p $WORK_DIR
