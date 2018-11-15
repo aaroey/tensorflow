@@ -24,9 +24,10 @@ run_server() {
   local saved_model_path_to_serve="$saved_model_path"
 
   if [[ "${use_trt}" == 'true' ]]; then
+    local precision_mode=${PRECISION_MODE:-FP32}
     local batch_size=${BATCH_SIZE:-1}
     local is_dynamic_op=${IS_DYNAMIC_OP:-False}
-    local trt_saved_model_path=${saved_model_path}_trt_batchsize${batch_size}_isdynamicop${is_dynamic_op}
+    local trt_saved_model_path=${saved_model_path}_trt_precisionmode${precision_mode}_batchsize${batch_size}_isdynamicop${is_dynamic_op}
     saved_model_path_to_serve="$trt_saved_model_path"
     if ! [[ -f $trt_saved_model_path/1/saved_model.pb ]]; then
       rm -rf $trt_saved_model_path
@@ -38,9 +39,8 @@ trt.create_inference_graph(
     None,
     None,
     max_batch_size=$batch_size,
+    precision_mode='$precision_mode',
     is_dynamic_op=$is_dynamic_op,
-    # maximum_cached_engines=8,
-    # cached_engine_batch_sizes=[1, 2, 4, 8, 16, 32, 64, 128],
     input_saved_model_dir='$saved_model_path_with_version',
     output_saved_model_dir='$trt_saved_model_path/1')  # Hard coded version 1
 "
@@ -48,7 +48,9 @@ trt.create_inference_graph(
   fi
   echo "----------------------------> model = $model"
   echo "----------------------------> use_trt = $use_trt"
+  echo "----------------------------> precision_mode = $precision_mode"
   echo "----------------------------> batch_size = $batch_size"
+  echo "----------------------------> is_dynamic_op = $is_dynamic_op"
 
   local tag="${1:-latest}"
   if [[ "$tag" == 'local' ]]; then
