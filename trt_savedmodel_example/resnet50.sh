@@ -20,7 +20,7 @@ run_server() {
     tar zxf $model.tar.gz
   fi
 
-  local use_trt=${USE_TRT:-'true'}
+  local use_trt=${USE_TRT:-true}
   local saved_model_path_to_serve="$saved_model_path"
 
   if [[ "${use_trt}" == 'true' ]]; then
