@@ -20,14 +20,15 @@ run_server() {
   local saved_model_path=$WORK_DIR/$model
   local trt_saved_model_path=$WORK_DIR/${model}_trt
 
+  sudo rm -rf $saved_model_path*
+  curl -O $saved_model_url
+  tar zxf $model.tar.gz
+  local saved_model_path_with_version=$(echo $saved_model_path/*)
+
   docker pull $devel_image
   docker run $run_options $devel_image bash -c "
-    rm -rf $saved_model_path $trt_saved_model_path
     cd $(pwd)
     pip install tensorflow-gpu
-
-    curl -O $saved_model_url
-    tar zxf $model.tar.gz
 
     python -c '
 import tensorflow.contrib.tensorrt as trt
@@ -37,13 +38,13 @@ trt.create_inference_graph(
     max_batch_size=${BATCH_SIZE:-1},
     precision_mode=\"${PRECISION_MODE:-FP32}\",
     is_dynamic_op=${IS_DYNAMIC_OP:-False},
-    input_saved_model_dir=\"$(echo $saved_model_path/*)\",
+    input_saved_model_dir=\"${saved_model_path_with_version}\",
     output_saved_model_dir=\"$trt_saved_model_path/1\")  # Hard coded version 1
 '
   "
 
   docker pull $image
-  docker run --rm --runtime=nvidia -p 8500:8500 \
+  docker run --rm --runtime=nvidia -p 8500:8500 -p 8501:8501 \
     --mount type=bind,source="$trt_saved_model_path",target=/models/mymodel \
     -e MODEL_NAME=mymodel -t $image &
 }
@@ -65,8 +66,5 @@ if [[ "$mode" == "server" ]]; then
   run_server "$@"
 elif [[ "$mode" == "client" ]]; then
   run_client "$@"
-elif [[ "$mode" == "clear" ]]; then
-  rm -rf $WORK_DIR
-else
   echo "Usage: resnet50.sh server|client|clean"
 fi

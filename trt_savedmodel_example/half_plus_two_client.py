@@ -64,7 +64,8 @@ def main(_):
                           FLAGS.x_value)
   send_classification_request(stub, FLAGS.model_name, 'classify_x_to_y', 'x',
                               FLAGS.x_value)
-  # TODO(aaroey): there is a problem: TRT fuses two "mostly-disjoint" subgraph
+  # TODO(aaroey): there is a problem with the old version of the half_plus_two
+  # SavedModel: TRT fuses two "mostly-disjoint" subgraph
   # (the joint part only contains Const nodes) into same engine, causing that
   # any output of the engine depends on inputs of both subgraphs, while
   # theoretically only input for the same subgraph is required.

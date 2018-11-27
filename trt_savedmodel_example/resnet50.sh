@@ -76,7 +76,7 @@ trt.create_inference_graph(
   # To debug the model server, add `--cap-add=SYS_PTRACE` to the `docker run`
   # command, and attach to it via `docker exec -i -t <container id> /bin/bash`
   # and then `gdb`.
-  docker run --cap-add=SYS_PTRACE --runtime=nvidia -p 8500:8500 \
+  docker run --cap-add=SYS_PTRACE --runtime=nvidia -p 8500:8500 -p 8501:8501 \
     --mount type=bind,source="$saved_model_path_to_serve",target=/models/mymodel \
     -e MODEL_NAME=mymodel -t $tag &
 }
