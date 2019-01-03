@@ -5,7 +5,7 @@ set -ex
 WORK_DIR=/tmp/trt_saved_model_simple_half_plus_two
 
 run_server() {
-  rm -rf $WORK_DIR
+  rm -rf $WORK_DIR/*
   local saved_model_path=$WORK_DIR/saved_model
   local trt_saved_model_path=$WORK_DIR/saved_model_trt
   mkdir -p $saved_model_path $trt_saved_model_path
