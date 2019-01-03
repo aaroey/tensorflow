@@ -3,13 +3,12 @@ set -ex
 
 # Prerequisites: install tensorflow with version >=1.12
 WORK_DIR=/tmp/trt_saved_model_simple_half_plus_two
-rm -rf $WORK_DIR
 
 run_server() {
+  rm -rf $WORK_DIR
   local saved_model_path=$WORK_DIR/saved_model
   local trt_saved_model_path=$WORK_DIR/saved_model_trt
   mkdir -p $saved_model_path $trt_saved_model_path
-  rm -rf $saved_model_path $trt_saved_model_path
 
   curl -O \
     https://raw.githubusercontent.com/aaroey/tensorflow/trt_savedmodel_example/trt_savedmodel_example/simple_half_plus_two.py
