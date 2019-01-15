@@ -56,14 +56,14 @@ trt.create_inference_graph(
   if [[ "$tag" == 'local' ]]; then
     curl -O https://raw.githubusercontent.com/tensorflow/serving/master/tensorflow_serving/tools/docker/Dockerfile.devel-gpu
     curl -O https://raw.githubusercontent.com/tensorflow/serving/master/tensorflow_serving/tools/docker/Dockerfile.gpu
-    docker build --pull -t my-tf-serving-trt-tf-head-env \
+    docker build --pull -t my-tfs-devel-gpu \
       -f Dockerfile.devel-gpu \
       .
-    docker build -t my-tf-serving-trt-devel \
-      --build-arg TF_SERVING_BUILD_IMAGE=my-tf-serving-trt-tf-head-env \
+    docker build -t my-tfs-gpu \
+      --build-arg TF_SERVING_BUILD_IMAGE=my-tfs-devel-gpu \
       -f Dockerfile.gpu \
       .
-    tag=my-tf-serving-trt-devel
+    tag=my-tfs-gpu
   else
     tag="tensorflow/serving:${tag}-gpu"
     docker pull $tag
