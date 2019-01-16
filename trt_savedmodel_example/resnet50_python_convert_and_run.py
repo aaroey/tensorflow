@@ -67,11 +67,9 @@ def main(_):
       result = sess.run(
           ['ArgMax:0', 'softmax_tensor:0'],
           feed_dict={'input_tensor:0': get_preprocessed_image_data()})
+      # The result should be 286 which is 'cougar, puma, catamount, mountain
+      # lion, painter, panther, Felis concolor' accoridng to imagenet category.
       print(result)
-
-  # The result should be 286 which is 'cougar, puma, catamount, mountain lion,
-  # painter, panther, Felis concolor' accoridng to imagenet category.
-  print('prediction result: ' + str(predicted_label))
 
 
 if __name__ == '__main__':
