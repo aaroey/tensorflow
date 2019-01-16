@@ -11,11 +11,11 @@ run_server() {
   curl -O $url_prefix/mnist_saved_model.py
   curl -O $url_prefix/mnist_input_data.py
 
-  # python mnist_saved_model.py \
-  #   --training_iteration=100  \
-  #   --model_version=1         \
-  #   --work_dir=$WORK_DIR      \
-  #   $saved_model_path
+  python mnist_saved_model.py \
+    --training_iteration=100  \
+    --model_version=1         \
+    --work_dir=$WORK_DIR      \
+    $saved_model_path
 
   #if ! [[ -f $trt_saved_model_path/1/saved_model.pb ]]; then
     python <<< "
