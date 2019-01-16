@@ -33,7 +33,21 @@ run_server() {
       rm -rf $trt_saved_model_path
       local saved_model_path_with_version="$(echo $saved_model_path/*)"
 
-      python <<< "
+      local tf_tag=tensorflow/tensorflow:1.12.0-gpu
+      docker pull $tf_tag
+      # TODO(aaroey): uncomment this when 1.13 is out.
+      # docker run --runtime=nvidia --rm -v $WORK_DIR:$WORK_DIR -t $tf_tag \
+      #   /usr/local/bin/saved_model_cli       \
+      #   convert                              \
+      #   --dir $saved_model_path_with_version \
+      #   --output_dir $trt_saved_model_path/1 \
+      #   --tag_set serve                      \
+      #   tensorrt                             \
+      #   --max_batch_size $batch_size         \
+      #   --precision_mode $precision_mode     \
+      #   --is_dynamic_op $is_dynamic_op
+      docker run --runtime=nvidia --rm -v $WORK_DIR:$WORK_DIR -t $tf_tag \
+        python -c "
 import tensorflow.contrib.tensorrt as trt
 trt.create_inference_graph(
     None,
@@ -52,8 +66,9 @@ trt.create_inference_graph(
   echo "----------------------------> batch_size = $batch_size"
   echo "----------------------------> is_dynamic_op = $is_dynamic_op"
 
-  local tag="${1:-latest}"
-  if [[ "$tag" == 'local' ]]; then
+  # NOTE(aaroey): this should work with latest
+  local tfs_tag="${1:-1.12.0}"
+  if [[ "$tfs_tag" == 'local' ]]; then
     curl -O https://raw.githubusercontent.com/tensorflow/serving/master/tensorflow_serving/tools/docker/Dockerfile.devel-gpu
     curl -O https://raw.githubusercontent.com/tensorflow/serving/master/tensorflow_serving/tools/docker/Dockerfile.gpu
     docker build --pull -t my-tfs-devel-gpu \
@@ -63,10 +78,10 @@ trt.create_inference_graph(
       --build-arg TF_SERVING_BUILD_IMAGE=my-tfs-devel-gpu \
       -f Dockerfile.gpu \
       .
-    tag=my-tfs-gpu
+    tfs_tag=my-tfs-gpu
   else
-    tag="tensorflow/serving:${tag}-gpu"
-    docker pull $tag
+    tfs_tag="tensorflow/serving:${tfs_tag}-gpu"
+    docker pull $tfs_tag
   fi
 
   # NOTE: 8500 is GRPC port, 8501 is REST port, the -p option binds the docker
@@ -76,17 +91,23 @@ trt.create_inference_graph(
   # To debug the model server, add `--cap-add=SYS_PTRACE` to the `docker run`
   # command, and attach to it via `docker exec -i -t <container id> /bin/bash`
   # and then `gdb`.
-  docker run --cap-add=SYS_PTRACE --runtime=nvidia -p 8500:8500 -p 8501:8501 \
-    --mount type=bind,source="$saved_model_path_to_serve",target=/models/mymodel \
-    -e MODEL_NAME=mymodel -t $tag &
+  docker run --runtime=nvidia --rm -p 8500:8500 -p 8501:8501 \
+    -v $saved_model_path_to_serve:/models/mymodel \
+    -e MODEL_NAME=mymodel -t $tfs_tag &
 }
 
 run_client() {
   curl -O https://raw.githubusercontent.com/aaroey/tensorflow/trt_savedmodel_example/trt_savedmodel_example/resnet50_client.py
 
-  python resnet50_client.py \
-    --batch_size=${BATCH_SIZE:-1} \
-    --preprocess_image=${PREPROCESS_IMAGE:-True}
+  local tfs_tag=tensorflow/serving:1.12.0-devel-gpu
+  docker pull $tfs_tag
+  docker run --network host --runtime=nvidia --rm -v $WORK_DIR:$WORK_DIR -t $tfs_tag \
+    bash -c "
+pip install Pillow;
+python $WORK_DIR/resnet50_client.py \
+  --batch_size=${BATCH_SIZE:-1}     \
+  --preprocess_image=${PREPROCESS_IMAGE:-True}
+"
 }
 
 mkdir -p $WORK_DIR
