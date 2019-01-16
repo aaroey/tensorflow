@@ -1,3 +1,5 @@
+# To run this example, download this script to /tmp, then do:
+#
 # $ mkdir /tmp/tftrtresnet
 # $ cd /tmp/tftrtresnet
 # $ curl -O http://download.tensorflow.org/models/official/20181001_resnet/savedmodels/resnet_v2_fp32_savedmodel_NCHW.tar.gz
@@ -5,7 +7,7 @@
 # $ docker run --runtime=nvidia --rm -v /tmp:/tmp -it \
 #     tensorflow/tensorflow:1.12.0-gpu bash -c "
 #     pip install requests Pillow;
-#     python /tmp/tftrthowto/resnet50_python_convert_and_run.py \
+#     python /tmp/resnet50_python_convert_and_run.py \
 #         --input_saved_model_dir /tmp/tftrtresnet/resnet_v2_fp32_savedmodel_NCHW/1538687196 \
 #         --output_saved_model_dir /tmp/tftrtresnet/resnet_v2_fp32_savedmodel_NCHW_trt/1538687196"
 
@@ -54,7 +56,7 @@ def main(_):
   trt.create_inference_graph(
       None,
       None,
-      max_batch_size=1,
+      max_batch_size=64,  # The official ResNet model is using batch size 64.
       precision_mode='FP32',
       is_dynamic_op=False,
       input_saved_model_dir=FLAGS.input_saved_model_dir,
