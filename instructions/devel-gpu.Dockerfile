@@ -6,7 +6,7 @@
 # $ export TFTRT_MASKRCNN_TAG=lam8da/aaroey-tensorflow:tf-trt-maskrcnn-test
 # $ docker pull $TFTRT_MASKRCNN_TAG
 #
-# Then open /tmp/maskrcnn/maskrcnn.py and set the SAVED_MODEL_DIR (line 11) to
+# Then open /tmp/maskrcnn/maskrcnn.py and set the SAVED_MODEL_DIR (line 12) to
 # the maskrcnn SavedModel path. Then run:
 #
 # $ docker run --runtime=nvidia --rm -v /tmp:/tmp -it $TFTRT_MASKRCNN_TAG python /tmp/maskrcnn/maskrcnn.py
@@ -137,3 +137,4 @@ RUN tensorflow/tools/ci_build/builds/configured GPU \
     pip --no-cache-dir install --upgrade /tmp/pip/tensorflow-*.whl && \
     rm -rf /tmp/pip
 # Clean up pip wheel (but not Bazel cache) when done.
+# rm -rf /root/.cache
