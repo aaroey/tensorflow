@@ -1,15 +1,22 @@
-# To run:
+# To reproduce the TF-TRT performance on MaskRCNN model:
 #
 # $ mkdir /tmp/maskrcnn
 # $ cd /tmp/maskrcnn
 # $ curl -O https://raw.githubusercontent.com/aaroey/tensorflow/maskrcnn_trt/instructions/maskrcnn.py
-# $ curl -O https://raw.githubusercontent.com/aaroey/tensorflow/maskrcnn_trt/instructions/devel-gpu.Dockerfile
-# $ docker build --pull -t tf-trt-maskrcnn -f /tmp/maskrcnn/devel-gpu.Dockerfile ./  # This will take a while
+# $ export TFTRT_MASKRCNN_TAG=lam8da/aaroey-tensorflow:tf-trt-maskrcnn-test
+# $ docker pull $TFTRT_MASKRCNN_TAG
 #
 # Then open /tmp/maskrcnn/maskrcnn.py and set the SAVED_MODEL_DIR (line 11) to
 # the maskrcnn SavedModel path. Then run:
 #
-# $ docker run --runtime=nvidia --rm -v /tmp:/tmp -it tf-trt-maskrcnn python /tmp/maskrcnn/maskrcnn.py
+# $ docker run --runtime=nvidia --rm -v /tmp:/tmp -it $TFTRT_MASKRCNN_TAG python /tmp/maskrcnn/maskrcnn.py
+#
+# (For debugging only) Notes: instead of 'docker pull', we can also build
+# the docker image using this Dockerfile. The result will be similar, but the
+# pulled version is smaller since it cleans up bazel cache after building TF. To
+# build, run:
+# $ curl -O https://raw.githubusercontent.com/aaroey/tensorflow/maskrcnn_trt/instructions/devel-gpu.Dockerfile
+# $ docker build --pull -t $TFTRT_MASKRCNN_TAG -f /tmp/maskrcnn/devel-gpu.Dockerfile ./  # This will take a while
 
 ARG UBUNTU_VERSION=16.04
 
