@@ -17,6 +17,10 @@
 # $ mkdir /tmp/maskrcnn
 # $ cd /tmp/maskrcnn
 # $ curl -O https://raw.githubusercontent.com/aaroey/tensorflow/maskrcnn_trt/instructions/maskrcnn_new.py
+#
+# Then open /tmp/maskrcnn/maskrcnn_new.py and set the SAVED_MODEL_DIR (line 12) to
+# the maskrcnn SavedModel path. Then run:
+#
 # $ docker pull tensorflow/tensorflow:nightly-gpu
 # $ docker run --runtime=nvidia --rm -v /tmp:/tmp -it tensorflow/tensorflow:nightly-gpu bash -c "pip install Pillow requests; python /tmp/maskrcnn/maskrcnn_new.py"
 #
