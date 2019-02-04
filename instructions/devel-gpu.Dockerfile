@@ -16,6 +16,15 @@
 #
 # $ mkdir /tmp/maskrcnn
 # $ cd /tmp/maskrcnn
+# $ curl -O https://raw.githubusercontent.com/aaroey/tensorflow/maskrcnn_trt/instructions/maskrcnn_new.py
+# $ docker pull tensorflow/tensorflow:nightly-gpu
+# $ docker run --runtime=nvidia --rm -v /tmp:/tmp -it tensorflow/tensorflow:nightly-gpu bash -c "pip install Pillow requests; python /tmp/maskrcnn/maskrcnn_new.py"
+#
+# ==============================================================================
+# Below are old instructions to use customized TF repo (outdated):
+#
+# $ mkdir /tmp/maskrcnn
+# $ cd /tmp/maskrcnn
 # $ curl -O https://raw.githubusercontent.com/aaroey/tensorflow/maskrcnn_trt/instructions/maskrcnn.py
 # $ export TFTRT_MASKRCNN_TAG=lam8da/aaroey-tensorflow:tf-trt-maskrcnn-test
 # $ docker pull $TFTRT_MASKRCNN_TAG
