@@ -18,7 +18,7 @@
 # $ cd /tmp/maskrcnn
 # $ curl -O https://raw.githubusercontent.com/aaroey/tensorflow/maskrcnn_trt/instructions/maskrcnn_new.py
 #
-# Then open /tmp/maskrcnn/maskrcnn_new.py and set the SAVED_MODEL_DIR (line 12) to
+# Then open /tmp/maskrcnn/maskrcnn_new.py and set the SAVED_MODEL_DIR (line 26) to
 # the maskrcnn SavedModel path. Then run:
 #
 # $ docker pull tensorflow/tensorflow:nightly-gpu
@@ -33,7 +33,7 @@
 # $ export TFTRT_MASKRCNN_TAG=lam8da/aaroey-tensorflow:tf-trt-maskrcnn-test
 # $ docker pull $TFTRT_MASKRCNN_TAG
 #
-# Then open /tmp/maskrcnn/maskrcnn.py and set the SAVED_MODEL_DIR (line 12) to
+# Then open /tmp/maskrcnn/maskrcnn.py and set the SAVED_MODEL_DIR (line 26) to
 # the maskrcnn SavedModel path. Then run:
 #
 # $ docker run --runtime=nvidia --rm -v /tmp:/tmp -it $TFTRT_MASKRCNN_TAG python /tmp/maskrcnn/maskrcnn.py
