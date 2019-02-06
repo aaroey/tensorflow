@@ -232,9 +232,6 @@ void BatchedNonMaxSuppressionOp(
   int num_classes = inp_scores.dim_size(2);
   const int num_batches = inp_boxes.dim_size(0);
 
-  // Default clip window of [0, 0, 1, 1] if none specified
-  std::vector<float> clip_window{0, 0, 1, 1};
-
   // [num_batches, per_batch_size * 4]
   std::vector<std::vector<float>> nmsed_boxes(num_batches);
   // [num_batches, per_batch_size]
@@ -375,18 +372,10 @@ void BatchedNonMaxSuppressionOp(
     while (curr_total_size > 0 && result_idx < result_candidate_vec.size()) {
       ResultCandidate next_candidate = result_candidate_vec[result_idx++];
       // Add to final output vectors
-      nmsed_boxes[batch].push_back(
-          std::max(std::min(next_candidate.box_coord[0], clip_window[2]),
-                   clip_window[0]));
-      nmsed_boxes[batch].push_back(
-          std::max(std::min(next_candidate.box_coord[1], clip_window[3]),
-                   clip_window[1]));
-      nmsed_boxes[batch].push_back(
-          std::max(std::min(next_candidate.box_coord[2], clip_window[2]),
-                   clip_window[0]));
-      nmsed_boxes[batch].push_back(
-          std::max(std::min(next_candidate.box_coord[3], clip_window[3]),
-                   clip_window[1]));
+      nmsed_boxes[batch].push_back(next_candidate.box_coord[0]);
+      nmsed_boxes[batch].push_back(next_candidate.box_coord[1]);
+      nmsed_boxes[batch].push_back(next_candidate.box_coord[2]);
+      nmsed_boxes[batch].push_back(next_candidate.box_coord[3]);
       nmsed_scores[batch].push_back(next_candidate.score);
       nmsed_classes[batch].push_back(next_candidate.class_idx);
       curr_total_size--;
