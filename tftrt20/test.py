@@ -3,45 +3,51 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.compiler.tensorrt import trt_convert as trt
 
-smdir = "/tmp/mobilenet"
-mobilenet = tf.keras.applications.MobileNet()
-tf.saved_model.save(mobilenet, smdir)
-
-converter = trt.TrtGraphConverter(
-    input_saved_model_dir=smdir,
-    is_dynamic_op=True)
-cf0 = converter.convert()
-
-smdir_trt = smdir + "_trt1"
-converter.save(smdir_trt)
-
-inp = np.random.random_sample([1,224,224,3]).astype(np.float32)
-inpconst = tf.constant(inp)
 msgs = []
-run_fn = lambda f: f(**{f._arg_keywords[0]: inpconst})
+inp = np.random.random_sample([1, 224, 224, 3]).astype(np.float32)
+inpconst = tf.constant(inp)
 
-def time_fn(d, against=None):
-  sm = tf.saved_model.load(d)
-  cf = sm.signatures["serving_default"]
+
+def run_and_time(saved_model_dir, ref_result=None):
+  """Helper method to measure the running time of a SavedModel."""
   NUM_RUNS = 100
-  v = None
+  root = tf.saved_model.load(saved_model_dir)
+  concrete_func = root.signatures["serving_default"]
+  result = None
   for _ in range(2):  # warm up
-    run_fn(cf)
+    concrete_func(input_1=inpconst)
 
-  dt0 = datetime.datetime.now()
+  start_time = datetime.datetime.now()
   for i in range(NUM_RUNS):
-    v = run_fn(cf)
-  dt1 = datetime.datetime.now()
+    result = concrete_func(input_1=inpconst)
+  end_time = datetime.datetime.now()
 
-  t = dt1 - dt0
-  v = v[v.keys()[0]]
+  elapsed = end_time - start_time
+  result = result[result.keys()[0]]
 
-  msgs.append("------> time: %s" % str(t))
-  if against is not None:
-    msgs.append("------> max diff: %s" % str(np.max(np.abs(v - against))))
-  return v
+  msgs.append("------> time for %d runs: %s" % (NUM_RUNS, str(elapsed)))
+  if ref_result is not None:
+    msgs.append(
+        "------> max diff: %s" % str(np.max(np.abs(result - ref_result))))
+  return result
 
-v = time_fn(smdir)
-time_fn(smdir_trt, v)
+
+# Save the original Keras model.
+saved_model_dir = "/tmp/mobilenet.original"
+mobilenet = tf.keras.applications.MobileNet()
+tf.saved_model.save(mobilenet, saved_model_dir)
+
+# Convert the SavedModel using TF-TRT
+converter = trt.TrtGraphConverter(
+    input_saved_model_dir=saved_model_dir,
+    precision_mode="FP16",
+    is_dynamic_op=True)
+converter.convert()
+saved_model_dir_trt = "/tmp/mobilenet.trt"
+converter.save(saved_model_dir_trt)
+
+# Measure the performance.
+ref_result = run_and_time(saved_model_dir)
+run_and_time(saved_model_dir_trt, ref_result)
 for m in msgs:
   print(m)
