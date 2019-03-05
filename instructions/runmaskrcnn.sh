@@ -17,7 +17,7 @@ model=$parent_dir/trt_model-tpu-coco-batchnms-normalized-nopreprocess_1551292076
   xprof_num_requests=3                                  \
                                                         \
   input_file=$parent_dir/a.jpg                          \
-  output_file_for_actual_input=/tmp/testtest/dbg.jpg    \
+  output_file_for_actual_input=/tmp/dbg.jpg             \
   resize_to_width=1472                                  \
   resize_to_height=896                                  \
                                                         \

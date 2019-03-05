@@ -29,14 +29,14 @@
 #
 # $ mkdir /tmp/maskrcnn
 # $ cd /tmp/maskrcnn
-# $ curl -O https://raw.githubusercontent.com/aaroey/tensorflow/maskrcnn_trt/instructions/maskrcnn.py
+# $ curl -O https://raw.githubusercontent.com/aaroey/tensorflow/maskrcnn_trt/instructions/maskrcnn_new.py
 # $ export TFTRT_MASKRCNN_TAG=lam8da/aaroey-tensorflow:tf-trt-maskrcnn-test
 # $ docker pull $TFTRT_MASKRCNN_TAG
 #
-# Then open /tmp/maskrcnn/maskrcnn.py and set the SAVED_MODEL_DIR (line 26) to
+# Then open /tmp/maskrcnn/maskrcnn_new.py and set the SAVED_MODEL_DIR (line 26) to
 # the maskrcnn SavedModel path. Then run:
 #
-# $ docker run --runtime=nvidia --rm -v /tmp:/tmp -it $TFTRT_MASKRCNN_TAG python /tmp/maskrcnn/maskrcnn.py
+# $ docker run --runtime=nvidia --rm -v /tmp:/tmp -it $TFTRT_MASKRCNN_TAG python /tmp/maskrcnn/maskrcnn_new.py
 #
 # (For debugging only) Notes: instead of 'docker pull', we can also build
 # the docker image using this Dockerfile. The result will be similar, but the
