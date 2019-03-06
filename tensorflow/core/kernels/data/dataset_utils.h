@@ -98,6 +98,18 @@ class VariantTensorDataWriter : public IteratorStateWriter {
   std::vector<string> keys_;
 };
 
+// Adds the functions in `to_add` to `base`. If a function with a matching
+// signature already exists in `base`, replaces it with the function from
+// `to_add`.
+Status AddToFunctionLibrary(FunctionLibraryDefinition* base,
+                            const FunctionLibraryDefinition& to_add);
+Status AddToFunctionLibrary(FunctionLibraryDefinition* base,
+                            const FunctionDefLibrary& to_add);
+
+// Creates a runner that runs functions with limited parallelism.
+std::function<void(std::function<void()>)> RunnerWithMaxParallelism(
+    std::function<void(std::function<void()>)> runner, int max_parallelism);
+
 }  // namespace data
 }  // namespace tensorflow
 
