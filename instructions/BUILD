@@ -1,5 +1,14 @@
 load("//tensorflow:tensorflow.bzl", "tf_cc_binary")
 
+py_binary(
+    name = "profile_maskrcnn_py",
+    srcs = ["profile_maskrcnn.py"],
+    main = "profile_maskrcnn.py",
+    deps = [
+        "//tensorflow:tensorflow_py",
+    ],
+)
+
 # bazel run -c opt --config=cuda maskrcnn:profile_maskrcnn_cc
 tf_cc_binary(
     name = "profile_maskrcnn_cc",
