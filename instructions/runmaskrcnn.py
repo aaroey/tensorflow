@@ -58,5 +58,7 @@ def main(argv):
       sess.run(outputs, feed_dict=feed_dict)
 
 
+# To run:
+# rm -rf /tmp/maskrcnn-trt; TF_CPP_VMODULE=convert_nodes=1,trt_engine_op=1,segment=1 python <this file>
 if __name__ == "__main__":
   tf.app.run(main)
