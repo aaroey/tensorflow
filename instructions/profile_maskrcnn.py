@@ -45,8 +45,11 @@ def main(argv):
   input_saved_model_dir = "/tmp/maskrcnn"
   converter = trt.TrtGraphConverter(
       input_saved_model_dir=input_saved_model_dir,
-      precision_mode="FP16",
-      is_dynamic_op=True)
+      max_workspace_size_bytes=1<<31,
+      # precision_mode="FP16",
+      precision_mode="FP32",
+      is_dynamic_op=True,
+      use_function_backup=False)
   converter.convert()
   trt_saved_model_dir = "/tmp/maskrcnn-trt"
   converter.save(trt_saved_model_dir)

@@ -1,15 +1,19 @@
 #!/bin/bash
 set -x
 
+
 if [[ "$1" == 'py' ]]; then
-  ../lambda-install.sh bazelrun instructions:profile_maskrcnn_py
+  rm -rf /tmp/maskrcnn-trt
+  ../lambda-install.sh bazelbuild instructions:profile_maskrcnn_py &&     \
+    TF_CPP_VMODULE=convert_nodes=1,trt_engine_op=1,segment=1,trt_logger=1 \
+    bazel-bin/instructions/profile_maskrcnn_py
 else
   gdb=$1
   parent_dir=$HOME/Workspace
   model=$parent_dir/trt_model-tpu-coco-batchnms-normalized-nopreprocess_1551292076_FP16_minsegmentsize3_maxworkspace1G_dynamicop_trtnms
   # model=$parent_dir/trt_model-tpu-coco-batchnms-normalized-nopreprocess_1551292076_FP16_minsegmentsize3_maxworkspace1G_dynamicop
 
-  ../lambda-install.sh bazelbuild maskrcnn:profile_maskrcnn_cc && \
+  ../lambda-install.sh bazelbuild instructions:profile_maskrcnn_cc && \
     TF_CPP_VMODULE=convert_nodes=1,trt_engine_op=1,segment=1,trt_logger=1 \
     TF_CPP_MIN_VLOG_LEVEL=0                               \
                                                           \
@@ -28,6 +32,6 @@ else
     max_batch_size=1                                      \
     max_workspace_size_bytes=1073741824                   \
     precision_mode=FP16                                   \
-    ${gdb} bazel-bin/maskrcnn/profile_maskrcnn_cc         \
+    ${gdb} bazel-bin/instructions/profile_maskrcnn_cc     \
 
 fi
