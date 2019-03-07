@@ -54,6 +54,7 @@ limitations under the License.
 #if GOOGLE_TENSORRT
 #include "tensorrt/include/NvInfer.h"
 #include "tensorrt/include/NvInferPlugin.h"
+#define TRT5_MAJOR_GUARD 6
 
 // Check if the types are equal. Cast to int first so that failure log message
 // would work!
@@ -975,9 +976,9 @@ Status TrtNodeValidator::ConvertConstToWeights(
 static void InitializeTrtPlugins() {
   static mutex plugin_mutex(LINKER_INITIALIZED);
   static bool plugin_initialized = false;
+  static Logger trt_logger;
   mutex_lock lock(plugin_mutex);
   if (!plugin_initialized) {
-    Logger trt_logger;
     plugin_initialized = initLibNvInferPlugins(&trt_logger, "");
     if (!plugin_initialized) {
       LOG(ERROR) << "Failed to initialize TensorRT plugins, and conversion may "
@@ -2332,7 +2333,9 @@ Status ConvertStridedSliceHelper(OpConverterParams* params,
   }
 // TRT 5.1 adds a slice layer. For older versions, we attempt to use the
 // padding layer with negative padding.
-#if NV_TENSORRT_MAJOR > 5 || (NV_TENSORRT_MAJOR == 5 && NV_TENSORRT_MINOR >= 1)
+#if NV_TENSORRT_MAJOR > TRT5_MAJOR_GUARD || (NV_TENSORRT_MAJOR == TRT5_MAJOR_GUARD && NV_TENSORRT_MINOR >= 1)
+  LOG(ERROR) << "=======================> ConvertStridedSliceHelper: " << node_def.name();
+  LOG(ERROR) << "====> " << node_def.name();
   // Use ISliceLayer.
   nvinfer1::Dims begin_dims, size_dims, stride_dims;
   TF_RETURN_IF_ERROR(TensorShapeArrayToTrtDims(begin, &begin_dims,
@@ -3753,6 +3756,9 @@ Status ConvertGather(OpConverterParams* params) {
   }
   if (params->validation_only) return Status::OK();
 
+  LOG(ERROR) << "==========> " << params_tensor.DebugString();
+  LOG(ERROR) << "==========> " << indices_tensor.DebugString();
+
   // Note on how IGatherLayer works: if both the data and indices tensors have
   // a batch size dimension of size N, it performs:
   // for batchid in xrange(N):
@@ -4000,13 +4006,14 @@ Status ConvertTopK(OpConverterParams* params) {
 Status ConvertCombinedNMS(OpConverterParams* params) {
   TF_RETURN_IF_ERROR(
       CheckInputsWeights(*params, {{"boxes", false},
-                                  {"scores", false},
-                                  {"max_output_size_per_class", true},
-                                  {"max_total_size", true},
-                                  {"iou_threshold", true},
-                                  {"score_threshold", true}}));
+                                   {"scores", false},
+                                   {"max_output_size_per_class", true},
+                                   {"max_total_size", true},
+                                   {"iou_threshold", true},
+                                   {"score_threshold", true}}));
   const auto& inputs = params->inputs;
   const auto& node_def = params->node_def;
+  LOG(ERROR) << "=========================> " << node_def.name();
 
   nvinfer1::ITensor* boxes_tensor =
       const_cast<nvinfer1::ITensor*>(inputs.at(0).tensor());
@@ -4129,15 +4136,46 @@ Status ConvertCombinedNMS(OpConverterParams* params) {
       &plugin_inputs[0], int(plugin_inputs.size()), *plugin);
   TFTRT_RETURN_ERROR_IF_NULLPTR(layer, node_def.name());
 
+  auto shrink_last_dim = [params](nvinfer1::ITensor* in_tensor,
+                                  nvinfer1::ITensor** out_tensor) {
+    nvinfer1::Dims dims = in_tensor->getDimensions();
+    if (dims.d[dims.nbDims - 1] != 1) {
+      return errors::Internal("Expect last dims to be 1, for tensor ",
+                              DebugString(*in_tensor));
+    }
+    --dims.nbDims;
+    // TODO(laigd): get rid of all the const_cast like this.
+    const nvinfer1::ITensor* tmp_tensor;
+    TF_RETURN_IF_ERROR(params->converter->PrepareTensorForShape(
+        TRT_TensorOrWeights(in_tensor), dims,
+        /*validation_only=*/false, &tmp_tensor));
+    *out_tensor = const_cast<nvinfer1::ITensor*>(tmp_tensor);
+    return Status::OK();
+  };
+
   // Set plugin outputs
-  nvinfer1::ITensor* output_num_detections = layer->getOutput(0);
   nvinfer1::ITensor* output_nmsed_boxes = layer->getOutput(1);
-  nvinfer1::ITensor* output_nmsed_scores = layer->getOutput(2);
-  nvinfer1::ITensor* output_nmsed_classes = layer->getOutput(3);
+  nvinfer1::ITensor* output_nmsed_scores = nullptr;
+  nvinfer1::ITensor* output_nmsed_classes = nullptr;
+  nvinfer1::ITensor* output_num_detections = layer->getOutput(0);
+  TF_RETURN_IF_ERROR(
+      shrink_last_dim(layer->getOutput(2), &output_nmsed_scores));
+  TF_RETURN_IF_ERROR(
+      shrink_last_dim(layer->getOutput(3), &output_nmsed_classes));
+  // TODO(laigd): PrepareTensorForShape() will report incompatible shapes
+  // because the result will be a 0-rank ITensor.
+  // TF_RETURN_IF_ERROR(
+  //     shrink_last_dim(layer->getOutput(0), &output_num_detections));
+
   params->outputs->push_back(TRT_TensorOrWeights(output_nmsed_boxes));
   params->outputs->push_back(TRT_TensorOrWeights(output_nmsed_scores));
   params->outputs->push_back(TRT_TensorOrWeights(output_nmsed_classes));
   params->outputs->push_back(TRT_TensorOrWeights(output_num_detections));
+  LOG(ERROR) << "=========================> " << node_def.name() << "\n"
+             << DebugString(*output_nmsed_boxes) << "\n"
+             << DebugString(*output_nmsed_scores) << "\n"
+             << DebugString(*output_nmsed_classes) << "\n"
+             << DebugString(*output_num_detections) << "\n";
 
   return Status::OK();
 }
@@ -4158,6 +4196,8 @@ static void RegisterValidatableOpConverters(
   (*registration)["GatherV2"] = ConvertGather;
   (*registration)["LeakyRelu"] = ConvertLeakyRelu;
   (*registration)["MatMul"] = ConvertMatMul;
+  // If only commenting out Pad and Conv2D it will get:
+  // python2: ../builder/cudnnBuilderGraph.cpp:386: void nvinfer1::builder::checkSanity(const nvinfer1::builder::Graph&): Assertion `tensors.size() == g.tensors.size()' failed.
   (*registration)["Pad"] = ConvertPad;
   (*registration)["Relu6"] = ConvertRelu6;
   (*registration)["Reshape"] = ConvertReshape;
@@ -4220,6 +4260,8 @@ Status ConvertGraphDefToEngine(
     nvinfer1::IGpuAllocator* allocator, TRTInt8Calibrator* calibrator,
     TrtUniquePtrType<nvinfer1::ICudaEngine>* engine, bool use_calibration,
     bool* convert_successfully) {
+  static mutex build_engine_mu;
+  mutex_lock lock(build_engine_mu);
   engine->reset();
   if (convert_successfully) *convert_successfully = false;
 
@@ -4258,7 +4300,7 @@ Status ConvertGraphDefToEngine(
   // Graph nodes are already topologically sorted during construction
   for (const auto& node_def : gdef.node()) {
     string node_name = node_def.name();
-    VLOG(2) << "Converting op name=" << node_name << ", op=" << node_def.op();
+    VLOG(1) << "Converting op name=" << node_name << ", op=" << node_def.op();
     if (IsEngineInput(node_name) && (node_def.op() == "Placeholder")) {
       int32 slot_number = -1;
       if (!strings::safe_strto32(  // non-absl ok
