@@ -46,8 +46,7 @@ def main(argv):
   converter = trt.TrtGraphConverter(
       input_saved_model_dir=input_saved_model_dir,
       max_workspace_size_bytes=1<<31,
-      # precision_mode="FP16",
-      precision_mode="FP32",
+      precision_mode="FP16",
       is_dynamic_op=True,
       use_function_backup=False)
   converter.convert()
@@ -59,6 +58,7 @@ def main(argv):
     with tf.Session() as sess:
       loader.load(sess, [tag_constants.SERVING], trt_saved_model_dir)
       sess.run(outputs, feed_dict=feed_dict)
+  print("-----------------------> done")
 
 
 # To run:
