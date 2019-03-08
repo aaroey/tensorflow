@@ -31,6 +31,7 @@ limitations under the License.
 #include "tensorflow/compiler/tf2tensorrt/plugin/trt_plugin_factory.h"
 #include "tensorflow/compiler/tf2tensorrt/utils/trt_logger.h"
 #include "tensorflow/compiler/tf2tensorrt/utils/trt_resources.h"
+#include "tensorflow/compiler/tf2tensorrt/utils/py_utils.h"
 #include "tensorflow/core/framework/node_def.pb.h"  // NOLINT
 #include "tensorflow/core/framework/node_def_builder.h"
 #include "tensorflow/core/framework/tensor.pb.h"        // NOLINT
@@ -978,6 +979,14 @@ static void InitializeTrtPlugins() {
   static bool plugin_initialized = false;
   static Logger trt_logger;
   mutex_lock lock(plugin_mutex);
+  int major, minor, patch;
+  GetLinkedTensorRTVersion(&major, &minor, &patch);
+  VLOG(1) << "Linked TensorRT version: " << major << "." << minor << "."
+          << patch;
+  GetLoadedTensorRTVersion(&major, &minor, &patch);
+  VLOG(1) << "Loaded TensorRT version: " << major << "." << minor << "."
+          << patch;
+
   if (!plugin_initialized) {
     plugin_initialized = initLibNvInferPlugins(&trt_logger, "");
     if (!plugin_initialized) {

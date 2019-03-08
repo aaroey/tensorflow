@@ -247,6 +247,7 @@ tf_cuda_library(
     ],
     deps = [
         ":segment",
+        ":py_utils",
         ":trt_allocator",
         ":trt_plugins",
         ":trt_logging",
