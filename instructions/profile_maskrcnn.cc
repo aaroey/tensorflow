@@ -35,7 +35,7 @@ using absl::StrCat;
 using tensorflow::int32;
 using tensorflow::string;
 
-int64 FLAGS_num_threads = 4;
+int64 FLAGS_num_threads = 1;
 int64 FLAGS_num_requests = 100;
 string FLAGS_model_dir = "";
 string FLAGS_profiler_output_path = "";
@@ -80,7 +80,11 @@ Status ReadFromEnvVar(const string& name, string default_val, string* value) {
 template <typename T>
 T GetEnvVar(const string& name, const T& default_val) {
   T value;
-  TF_QCHECK_OK(ReadFromEnvVar(name.substr(6), default_val, &value));
+  int pos = name.find("FLAGS_");
+  const string envvar = name.substr(pos + 6);
+  TF_QCHECK_OK(ReadFromEnvVar(envvar, default_val, &value));
+  LOG(INFO) << "Reading from " << envvar << " default: " << default_val
+            << " vs actual: " << value;
   return value;
 }
 
@@ -267,8 +271,8 @@ int main(int argc, char* argv[]) {
   }
   for (tensorflow::int64 e : elapsed) {
     MYLOG << "eval with " << (e ? "TRT" : "original") << " model on "
-          << opts.num_requests << " requests took " << e
-          << " us, = " << e / 1000000.0
+          << opts.num_requests << " requests with " << opts.num_threads
+          << " threads took " << e << " us, = " << e / 1000000.0
           << " seconds. Mean latency: " << e / 1000.0 / opts.num_requests
           << " ms";
   }
