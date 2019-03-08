@@ -3763,8 +3763,6 @@ Status ConvertGather(OpConverterParams* params) {
   }
   if (params->validation_only) return Status::OK();
 
-  LOG(ERROR) << "==========> " << params_tensor.DebugString();
-  LOG(ERROR) << "==========> " << indices_tensor.DebugString();
 
   // Note on how IGatherLayer works: if both the data and indices tensors have
   // a batch size dimension of size N, it performs:
@@ -4020,7 +4018,6 @@ Status ConvertCombinedNMS(OpConverterParams* params) {
                                    {"score_threshold", true}}));
   const auto& inputs = params->inputs;
   const auto& node_def = params->node_def;
-  LOG(ERROR) << "=========================> " << node_def.name();
 
   nvinfer1::ITensor* boxes_tensor =
       const_cast<nvinfer1::ITensor*>(inputs.at(0).tensor());
@@ -4178,11 +4175,6 @@ Status ConvertCombinedNMS(OpConverterParams* params) {
   params->outputs->push_back(TRT_TensorOrWeights(output_nmsed_scores));
   params->outputs->push_back(TRT_TensorOrWeights(output_nmsed_classes));
   params->outputs->push_back(TRT_TensorOrWeights(output_num_detections));
-  LOG(ERROR) << "=========================> " << node_def.name() << "\n"
-             << DebugString(*output_nmsed_boxes) << "\n"
-             << DebugString(*output_nmsed_scores) << "\n"
-             << DebugString(*output_nmsed_classes) << "\n"
-             << DebugString(*output_num_detections) << "\n";
 
   return Status::OK();
 }
@@ -4203,8 +4195,6 @@ static void RegisterValidatableOpConverters(
   (*registration)["GatherV2"] = ConvertGather;
   (*registration)["LeakyRelu"] = ConvertLeakyRelu;
   (*registration)["MatMul"] = ConvertMatMul;
-  // If only commenting out Pad and Conv2D it will get:
-  // python2: ../builder/cudnnBuilderGraph.cpp:386: void nvinfer1::builder::checkSanity(const nvinfer1::builder::Graph&): Assertion `tensors.size() == g.tensors.size()' failed.
   (*registration)["Pad"] = ConvertPad;
   (*registration)["Relu6"] = ConvertRelu6;
   (*registration)["Reshape"] = ConvertReshape;
