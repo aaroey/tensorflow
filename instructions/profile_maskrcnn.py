@@ -14,6 +14,7 @@
 
 import requests
 import io
+import six
 
 from PIL import Image
 import numpy as np
@@ -21,6 +22,34 @@ import tensorflow as tf
 from tensorflow.python.saved_model import loader
 from tensorflow.python.saved_model import tag_constants
 from tensorflow.python.compiler.tensorrt import trt_convert as trt
+
+
+def to_bytes(s):
+  if isinstance(s, six.text_type):  # unicode
+    return s.encode("utf-8", errors="surrogateescape")
+  return s
+
+
+def strip_nodedef(nodedef):
+  from google.protobuf import descriptor
+  if nodedef.op == "Const":
+    t = nodedef.attr["value"].tensor
+    if len(t.tensor_content) > 1000:
+      t.tensor_content = to_bytes("")
+    for desc, values in t.ListFields():
+      if desc.label is descriptor.FieldDescriptor.LABEL_REPEATED:
+        if len(getattr(t, desc.name)) > 1000:
+          getattr(t, desc.name)[:] = []
+  elif nodedef.op == "TRTEngineOp":
+    nodedef.attr["serialized_segment"].s = to_bytes("")
+
+
+def strip_graph(gdef):
+  for n in gdef.node:
+    strip_nodedef(n)
+  for f in gdef.library.function:
+    for n in f.node_def:
+      strip_nodedef(n)
 
 
 def get_feeds_fetches():
@@ -43,13 +72,19 @@ num_runs = 100
 
 def main(argv):
   input_saved_model_dir = "/tmp/maskrcnn"
+  model_id = "1551814896"
   converter = trt.TrtGraphConverter(
       input_saved_model_dir=input_saved_model_dir,
-      max_workspace_size_bytes=1<<31,
+      max_workspace_size_bytes=1 << 31,
       precision_mode="FP16",
       is_dynamic_op=True,
       use_function_backup=False)
-  converter.convert()
+  gd = tf.GraphDef()
+  gd.CopyFrom(converter.convert())
+  strip_graph(gd)
+  with open("/tmp/maskrcnn." + model_id + ".graphdef.trt.stripped.pbtxt",
+            "w") as f:
+    f.write(str(gd))
   trt_saved_model_dir = "/tmp/maskrcnn-trt"
   converter.save(trt_saved_model_dir)
 

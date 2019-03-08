@@ -55,7 +55,6 @@ limitations under the License.
 #if GOOGLE_TENSORRT
 #include "tensorrt/include/NvInfer.h"
 #include "tensorrt/include/NvInferPlugin.h"
-#define TRT5_MAJOR_GUARD 6
 
 // Check if the types are equal. Cast to int first so that failure log message
 // would work!
@@ -2342,9 +2341,8 @@ Status ConvertStridedSliceHelper(OpConverterParams* params,
   }
 // TRT 5.1 adds a slice layer. For older versions, we attempt to use the
 // padding layer with negative padding.
-#if NV_TENSORRT_MAJOR > TRT5_MAJOR_GUARD || (NV_TENSORRT_MAJOR == TRT5_MAJOR_GUARD && NV_TENSORRT_MINOR >= 1)
-  LOG(ERROR) << "=======================> ConvertStridedSliceHelper: " << node_def.name();
-  LOG(ERROR) << "====> " << node_def.name();
+// #if NV_TENSORRT_MAJOR > 5 || (NV_TENSORRT_MAJOR == 5 && NV_TENSORRT_MINOR >= 1)
+#if 0
   // Use ISliceLayer.
   nvinfer1::Dims begin_dims, size_dims, stride_dims;
   TF_RETURN_IF_ERROR(TensorShapeArrayToTrtDims(begin, &begin_dims,
@@ -4381,7 +4379,7 @@ Status ConvertSegmentToGraphDef(
     const Graph* graph, const grappler::GraphProperties& graph_properties,
     const std::vector<const Node*>& subgraph_nodes,  // In topological order
     std::vector<EngineConnection>* connections, GraphDef* segment_def,
-    string* common_scope) {
+    string* engine_name) {
   std::set<string> marker_nodes;
   // Update connection shapes/data types and add corresponding input/output
   // nodes in the segment graphdef.
@@ -4514,8 +4512,8 @@ Status ConvertSegmentToGraphDef(
       snode->mutable_input()->RemoveLast();
     }
   }
-  *common_scope = local_scope;
-  VLOG(1) << "Converted TensorRT candidate segment @scope '" << local_scope
+  *engine_name = StrCat(local_scope, *engine_name);
+  VLOG(1) << "Converted TensorRT candidate segment '" << *engine_name
           << "' to a GraphDef";
   return Status::OK();
 }

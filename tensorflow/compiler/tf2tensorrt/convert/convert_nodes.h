@@ -129,7 +129,7 @@ Status ConvertSegmentToGraphDef(
     const Graph* graph, const grappler::GraphProperties& graph_properties,
     const std::vector<const Node*>& subgraph_nodes,
     std::vector<EngineConnection>* connections, GraphDef* segment_def,
-    string* common_scope);
+    string* engine_name);
 
 // Converts given subgraph to a TRT engine saved in 'engine'. Returns ok iff
 // 'builder' successfully build the engine. If the result is not ok, 'engine'
