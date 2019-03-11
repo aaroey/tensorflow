@@ -17,8 +17,8 @@
 TensorFlow has support for reading from and writing to Cloud Bigtable. To use
 TensorFlow + Cloud Bigtable integration, first create a BigtableClient to
 configure your connection to Cloud Bigtable, and then create a BigtableTable
-object to allow you to create numerous @{tf.data.Dataset}s to read data, or
-write a @{tf.data.Dataset} object to the underlying Cloud Bigtable table.
+object to allow you to create numerous `tf.data.Dataset`s to read data, or
+write a `tf.data.Dataset` object to the underlying Cloud Bigtable table.
 
 For background on Cloud Bigtable, see: https://cloud.google.com/bigtable .
 """
@@ -31,12 +31,12 @@ from six import iteritems
 from six import string_types
 
 from tensorflow.contrib.bigtable.ops import gen_bigtable_ops
-from tensorflow.contrib.data.python.ops import interleave_ops
 from tensorflow.contrib.util import loader
+from tensorflow.python.data.experimental.ops import interleave_ops
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.data.util import nest
+from tensorflow.python.data.util import structure
 from tensorflow.python.framework import dtypes
-from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.platform import resource_loader
 
@@ -111,8 +111,7 @@ class BigtableClient(object):
 
 
 class BigtableTable(object):
-  """BigtableTable is the entrypoint for reading and writing data in Cloud
-  Bigtable.
+  """Entry point for reading and writing data in Cloud Bigtable.
 
   This BigtableTable class is the Python representation of the Cloud Bigtable
   table within TensorFlow. Methods on this class allow data to be read from and
@@ -203,7 +202,7 @@ class BigtableTable(object):
         be retrieved. If end is None, all subsequent row keys will be retrieved.
 
     Returns:
-      A @{tf.data.Dataset} containing `tf.string` Tensors corresponding to all
+      A `tf.data.Dataset` containing `tf.string` Tensors corresponding to all
       of the row keys between `start` and `end`.
     """
     # TODO(saeta): Make inclusive / exclusive configurable?
@@ -219,22 +218,22 @@ class BigtableTable(object):
         retrieved.
 
     Returns:
-      A @{tf.data.Dataset}. containing `tf.string` Tensors corresponding to all
+      A `tf.data.Dataset`. containing `tf.string` Tensors corresponding to all
       of the row keys matching that prefix.
     """
-    return _BigtablePrefixKeyDataset(self, prefix)
+    return dataset_ops.DatasetV1Adapter(_BigtablePrefixKeyDataset(self, prefix))
 
   def sample_keys(self):
     """Retrieves a sampling of row keys from the Bigtable table.
 
     This dataset is most often used in conjunction with
-    @{tf.contrib.data.parallel_interleave} to construct a set of ranges for
+    `tf.data.experimental.parallel_interleave` to construct a set of ranges for
     scanning in parallel.
 
     Returns:
-      A @{tf.data.Dataset} returning string row keys.
+      A `tf.data.Dataset` returning string row keys.
     """
-    return _BigtableSampleKeysDataset(self)
+    return dataset_ops.DatasetV1Adapter(_BigtableSampleKeysDataset(self))
 
   def scan_prefix(self, prefix, probability=None, columns=None, **kwargs):
     """Retrieves row (including values) from the Bigtable service.
@@ -272,14 +271,15 @@ class BigtableTable(object):
         that are treated as the column qualifier (column name).
 
     Returns:
-      A @{tf.data.Dataset} returning the row keys and the cell contents.
+      A `tf.data.Dataset` returning the row keys and the cell contents.
 
     Raises:
       ValueError: If the configured probability is unexpected.
     """
     probability = _normalize_probability(probability)
     normalized = _normalize_columns(columns, kwargs)
-    return _BigtableScanDataset(self, prefix, "", "", normalized, probability)
+    return dataset_ops.DatasetV1Adapter(
+        _BigtableScanDataset(self, prefix, "", "", normalized, probability))
 
   def scan_range(self, start, end, probability=None, columns=None, **kwargs):
     """Retrieves rows (including values) from the Bigtable service.
@@ -317,14 +317,15 @@ class BigtableTable(object):
         that are treated as the column qualifier (column name).
 
     Returns:
-      A @{tf.data.Dataset} returning the row keys and the cell contents.
+      A `tf.data.Dataset` returning the row keys and the cell contents.
 
     Raises:
       ValueError: If the configured probability is unexpected.
     """
     probability = _normalize_probability(probability)
     normalized = _normalize_columns(columns, kwargs)
-    return _BigtableScanDataset(self, "", start, end, normalized, probability)
+    return dataset_ops.DatasetV1Adapter(
+        _BigtableScanDataset(self, "", start, end, normalized, probability))
 
   def parallel_scan_prefix(self,
                            prefix,
@@ -373,14 +374,15 @@ class BigtableTable(object):
         that are treated as the column qualifier (column name).
 
     Returns:
-      A @{tf.data.Dataset} returning the row keys and the cell contents.
+      A `tf.data.Dataset` returning the row keys and the cell contents.
 
     Raises:
       ValueError: If the configured probability is unexpected.
     """
     probability = _normalize_probability(probability)
     normalized = _normalize_columns(columns, kwargs)
-    ds = _BigtableSampleKeyPairsDataset(self, prefix, "", "")
+    ds = dataset_ops.DatasetV1Adapter(
+        _BigtableSampleKeyPairsDataset(self, prefix, "", ""))
     return self._make_parallel_scan_dataset(ds, num_parallel_scans, probability,
                                             normalized)
 
@@ -435,14 +437,15 @@ class BigtableTable(object):
         that are treated as the column qualifier (column name).
 
     Returns:
-      A @{tf.data.Dataset} returning the row keys and the cell contents.
+      A `tf.data.Dataset` returning the row keys and the cell contents.
 
     Raises:
       ValueError: If the configured probability is unexpected.
     """
     probability = _normalize_probability(probability)
     normalized = _normalize_columns(columns, kwargs)
-    ds = _BigtableSampleKeyPairsDataset(self, "", start, end)
+    ds = dataset_ops.DatasetV1Adapter(
+        _BigtableSampleKeyPairsDataset(self, "", start, end))
     return self._make_parallel_scan_dataset(ds, num_parallel_scans, probability,
                                             normalized)
 
@@ -450,12 +453,12 @@ class BigtableTable(object):
     """Writes a dataset to the table.
 
     Args:
-      dataset: A @{tf.data.Dataset} to be written to this table. It must produce
+      dataset: A `tf.data.Dataset` to be written to this table. It must produce
         a list of number-of-columns+1 elements, all of which must be strings.
         The first value will be used as the row key, and subsequent values will
         be used as cell values for the corresponding columns from the
         corresponding column_families and columns entries.
-      column_families: A @{tf.Tensor} of `tf.string`s corresponding to the
+      column_families: A `tf.Tensor` of `tf.string`s corresponding to the
         column names to store the dataset's elements into.
       columns: A `tf.Tensor` of `tf.string`s corresponding to the column names
         to store the dataset's elements into.
@@ -463,7 +466,7 @@ class BigtableTable(object):
         Leave as None to use server-provided timestamps.
 
     Returns:
-      A @{tf.Operation} that can be run to perform the write.
+      A `tf.Operation` that can be run to perform the write.
 
     Raises:
       ValueError: If there are unexpected or incompatible types, or if the
@@ -472,21 +475,23 @@ class BigtableTable(object):
     """
     if timestamp is None:
       timestamp = -1  # Bigtable server provided timestamp.
-    for tensor_type in nest.flatten(dataset.output_types):
+    for tensor_type in nest.flatten(
+        dataset_ops.get_legacy_output_types(dataset)):
       if tensor_type != dtypes.string:
         raise ValueError("Not all elements of the dataset were `tf.string`")
-    for shape in nest.flatten(dataset.output_shapes):
+    for shape in nest.flatten(dataset_ops.get_legacy_output_shapes(dataset)):
       if not shape.is_compatible_with(tensor_shape.scalar()):
         raise ValueError("Not all elements of the dataset were scalars")
     if len(column_families) != len(columns):
       raise ValueError("len(column_families) != len(columns)")
-    if len(nest.flatten(dataset.output_types)) != len(columns) + 1:
+    if len(nest.flatten(
+        dataset_ops.get_legacy_output_types(dataset))) != len(columns) + 1:
       raise ValueError("A column name must be specified for every component of "
                        "the dataset elements. (e.g.: len(columns) != "
                        "len(dataset.output_types))")
     return gen_bigtable_ops.dataset_to_bigtable(
         self._resource,
-        dataset._as_variant_tensor(),  # pylint: disable=protected-access
+        dataset._variant_tensor,  # pylint: disable=protected-access
         column_families,
         columns,
         timestamp)
@@ -502,7 +507,7 @@ class BigtableTable(object):
       normalized_columns: The column families and column qualifiers to retrieve.
 
     Returns:
-      A @{tf.data.Dataset} representing the result of the parallel scan.
+      A `tf.data.Dataset` representing the result of the parallel scan.
     """
     if num_parallel_scans is None:
       num_parallel_scans = 50
@@ -575,30 +580,23 @@ def _normalize_columns(columns, provided_kwargs):
   return normalized
 
 
-class _BigtableKeyDataset(dataset_ops.Dataset):
+class _BigtableKeyDataset(dataset_ops.DatasetSource):
   """_BigtableKeyDataset is an abstract class representing the keys of a table.
   """
 
-  def __init__(self, table):
+  def __init__(self, table, variant_tensor):
     """Constructs a _BigtableKeyDataset.
 
     Args:
       table: a Bigtable class.
+      variant_tensor: DT_VARIANT representation of the dataset.
     """
-    super(_BigtableKeyDataset, self).__init__()
+    super(_BigtableKeyDataset, self).__init__(variant_tensor)
     self._table = table
 
   @property
-  def output_classes(self):
-    return ops.Tensor
-
-  @property
-  def output_shapes(self):
-    return tensor_shape.TensorShape([])
-
-  @property
-  def output_types(self):
-    return dtypes.string
+  def _element_structure(self):
+    return structure.TensorStructure(dtypes.string, [])
 
 
 class _BigtablePrefixKeyDataset(_BigtableKeyDataset):
@@ -606,13 +604,11 @@ class _BigtablePrefixKeyDataset(_BigtableKeyDataset):
   """
 
   def __init__(self, table, prefix):
-    super(_BigtablePrefixKeyDataset, self).__init__(table)
     self._prefix = prefix
-
-  def _as_variant_tensor(self):
-    return gen_bigtable_ops.bigtable_prefix_key_dataset(
-        table=self._table._resource,  # pylint: disable=protected-access
+    variant_tensor = gen_bigtable_ops.bigtable_prefix_key_dataset(
+        table=table._resource,  # pylint: disable=protected-access
         prefix=self._prefix)
+    super(_BigtablePrefixKeyDataset, self).__init__(table, variant_tensor)
 
 
 class _BigtableRangeKeyDataset(_BigtableKeyDataset):
@@ -620,15 +616,13 @@ class _BigtableRangeKeyDataset(_BigtableKeyDataset):
   """
 
   def __init__(self, table, start, end):
-    super(_BigtableRangeKeyDataset, self).__init__(table)
     self._start = start
     self._end = end
-
-  def _as_variant_tensor(self):
-    return gen_bigtable_ops.bigtable_range_key_dataset(
-        table=self._table._resource,  # pylint: disable=protected-access
+    variant_tensor = gen_bigtable_ops.bigtable_range_key_dataset(
+        table=table._resource,  # pylint: disable=protected-access
         start_key=self._start,
         end_key=self._end)
+    super(_BigtableRangeKeyDataset, self).__init__(table, variant_tensor)
 
 
 class _BigtableSampleKeysDataset(_BigtableKeyDataset):
@@ -638,14 +632,12 @@ class _BigtableSampleKeysDataset(_BigtableKeyDataset):
   # TODO(saeta): Expose the data size offsets into the keys.
 
   def __init__(self, table):
-    super(_BigtableSampleKeysDataset, self).__init__(table)
-
-  def _as_variant_tensor(self):
-    return gen_bigtable_ops.bigtable_sample_keys_dataset(
-        table=self._table._resource)  # pylint: disable=protected-access
+    variant_tensor = gen_bigtable_ops.bigtable_sample_keys_dataset(
+        table=table._resource)  # pylint: disable=protected-access
+    super(_BigtableSampleKeysDataset, self).__init__(table, variant_tensor)
 
 
-class _BigtableLookupDataset(dataset_ops.Dataset):
+class _BigtableLookupDataset(dataset_ops.DatasetSource):
   """_BigtableLookupDataset represents a dataset that retrieves values for keys.
   """
 
@@ -656,29 +648,20 @@ class _BigtableLookupDataset(dataset_ops.Dataset):
     self._normalized = normalized
     self._column_families = [i[0] for i in normalized]
     self._columns = [i[1] for i in normalized]
-
-  @property
-  def output_classes(self):
-    return tuple([ops.Tensor] * self._num_outputs)
-
-  @property
-  def output_shapes(self):
-    return tuple([tensor_shape.TensorShape([])] * self._num_outputs)
-
-  @property
-  def output_types(self):
-    return tuple([dtypes.string] * self._num_outputs)
-
-  def _as_variant_tensor(self):
-    # pylint: disable=protected-access
-    return gen_bigtable_ops.bigtable_lookup_dataset(
-        keys_dataset=self._dataset._as_variant_tensor(),
-        table=self._table._resource,
+    variant_tensor = gen_bigtable_ops.bigtable_lookup_dataset(
+        keys_dataset=self._dataset._variant_tensor,  # pylint: disable=protected-access
+        table=self._table._resource,  # pylint: disable=protected-access
         column_families=self._column_families,
         columns=self._columns)
+    super(_BigtableLookupDataset, self).__init__(variant_tensor)
+
+  @property
+  def _element_structure(self):
+    return structure.NestedStructure(tuple(
+        [structure.TensorStructure(dtypes.string, [])] * self._num_outputs))
 
 
-class _BigtableScanDataset(dataset_ops.Dataset):
+class _BigtableScanDataset(dataset_ops.DatasetSource):
   """_BigtableScanDataset represents a dataset that retrieves keys and values.
   """
 
@@ -691,21 +674,7 @@ class _BigtableScanDataset(dataset_ops.Dataset):
     self._columns = [i[1] for i in normalized]
     self._probability = probability
     self._num_outputs = len(normalized) + 1  # 1 for row key
-
-  @property
-  def output_classes(self):
-    return tuple([ops.Tensor] * self._num_outputs)
-
-  @property
-  def output_shapes(self):
-    return tuple([tensor_shape.TensorShape([])] * self._num_outputs)
-
-  @property
-  def output_types(self):
-    return tuple([dtypes.string] * self._num_outputs)
-
-  def _as_variant_tensor(self):
-    return gen_bigtable_ops.bigtable_scan_dataset(
+    variant_tensor = gen_bigtable_ops.bigtable_scan_dataset(
         table=self._table._resource,  # pylint: disable=protected-access
         prefix=self._prefix,
         start_key=self._start,
@@ -713,9 +682,16 @@ class _BigtableScanDataset(dataset_ops.Dataset):
         column_families=self._column_families,
         columns=self._columns,
         probability=self._probability)
+    super(_BigtableScanDataset, self).__init__(variant_tensor)
+
+  @property
+  def _element_structure(self):
+    return structure.NestedStructure(
+        tuple(
+            [structure.TensorStructure(dtypes.string, [])] * self._num_outputs))
 
 
-class _BigtableSampleKeyPairsDataset(dataset_ops.Dataset):
+class _BigtableSampleKeyPairsDataset(dataset_ops.DatasetSource):
   """_BigtableSampleKeyPairsDataset returns key pairs from a Bigtable table.
   """
 
@@ -724,23 +700,15 @@ class _BigtableSampleKeyPairsDataset(dataset_ops.Dataset):
     self._prefix = prefix
     self._start = start
     self._end = end
-
-  @property
-  def output_classes(self):
-    return (ops.Tensor, ops.Tensor)
-
-  @property
-  def output_shapes(self):
-    return (tensor_shape.TensorShape([]), tensor_shape.TensorShape([]))
-
-  @property
-  def output_types(self):
-    return (dtypes.string, dtypes.string)
-
-  def _as_variant_tensor(self):
-    # pylint: disable=protected-access
-    return gen_bigtable_ops.bigtable_sample_key_pairs_dataset(
-        table=self._table._resource,
+    variant_tensor = gen_bigtable_ops.bigtable_sample_key_pairs_dataset(
+        table=self._table._resource,  # pylint: disable=protected-access
         prefix=self._prefix,
         start_key=self._start,
         end_key=self._end)
+    super(_BigtableSampleKeyPairsDataset, self).__init__(variant_tensor)
+
+  @property
+  def _element_structure(self):
+    return structure.NestedStructure(
+        (structure.TensorStructure(dtypes.string, []),
+         structure.TensorStructure(dtypes.string, [])))

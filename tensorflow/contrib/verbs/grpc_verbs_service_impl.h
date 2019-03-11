@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_CONTRIB_GRPC_VERBS_SERVICE_IMPL_H_
-#define TENSORFLOW_CONTRIB_GRPC_VERBS_SERVICE_IMPL_H_
+#ifndef TENSORFLOW_CONTRIB_VERBS_GRPC_VERBS_SERVICE_IMPL_H_
+#define TENSORFLOW_CONTRIB_VERBS_GRPC_VERBS_SERVICE_IMPL_H_
 
 #include "grpcpp/impl/codegen/async_stream.h"
 #include "grpcpp/impl/codegen/async_unary_call.h"
@@ -26,14 +26,6 @@ limitations under the License.
 #include "grpcpp/impl/codegen/sync_stream.h"
 
 #include "tensorflow/contrib/verbs/verbs_service.pb.h"
-
-namespace grpc {
-class CompletionQueue;
-class Channel;
-class RpcService;
-class ServerCompletionQueue;
-class ServerContext;
-}  // namespace grpc
 
 namespace tensorflow {
 
@@ -86,4 +78,4 @@ class VerbsService GRPC_FINAL {
 
 }  // namespace tensorflow
 
-#endif  // TENSORFLOW_CONTRIB_GRPC_VERBS_SERVICE_IMPL_H_
+#endif  // TENSORFLOW_CONTRIB_VERBS_GRPC_VERBS_SERVICE_IMPL_H_

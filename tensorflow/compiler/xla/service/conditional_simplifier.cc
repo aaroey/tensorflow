@@ -19,6 +19,7 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/service/call_inliner.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
@@ -28,14 +29,12 @@ limitations under the License.
 #include "tensorflow/compiler/xla/types.h"
 #include "tensorflow/compiler/xla/util.h"
 #include "tensorflow/core/lib/core/errors.h"
-#include "tensorflow/core/lib/strings/str_util.h"
-#include "tensorflow/core/lib/strings/strcat.h"
 
 namespace xla {
 
 // Tries to replace a conditional with a call operation of the corresponding
-// computation. If the given conditional has a constant predicate, tries to
-// replace it with a call to its true/false computation as appropriate and then
+// computation. If the given conditional has a constant branch_index, tries to
+// replace it with a call to its corresponding branch computation and then
 // inline that computation.
 //
 // Returns true if it made a change to the graph.
@@ -51,24 +50,30 @@ static StatusOr<bool> TryRemoveConditional(HloInstruction* conditional) {
     return false;
   }
 
-  if (conditional->operand(0)->opcode() != HloOpcode::kConstant) {
-    VLOG(2) << "Not attempting to remove conditional as its predicate is not a "
-               "compile-time constant: "
-            << conditional->ToShortString();
-    return false;
-  }
+  // We can always inline a 1-branch conditional due to default branch fallback.
+  int branch_index = 0;
+  if (conditional->branch_count() > 1) {
+    if (conditional->operand(0)->opcode() != HloOpcode::kConstant) {
+      VLOG(2) << "Not attempting to remove conditional as its branch_index is "
+                 "not a compile-time constant: "
+              << conditional->ToShortString();
+      return false;
+    }
 
+    if (conditional->operand(0)->shape().element_type() == PRED) {
+      branch_index = conditional->operand(0)->literal().Get<bool>({}) ? 0 : 1;
+    } else {
+      branch_index = conditional->operand(0)->literal().Get<int32>({});
+      if (branch_index < 0 || branch_index >= conditional->branch_count()) {
+        branch_index = conditional->branch_count() - 1;
+      }
+    }
+  }
   auto computation = conditional->parent();
   HloInstruction* call_op;
-  if (conditional->operand(0)->literal().Get<bool>({})) {
-    call_op = computation->AddInstruction(HloInstruction::CreateCall(
-        conditional->shape(), {conditional->mutable_operand(1)},
-        conditional->true_computation()));
-  } else {
-    call_op = computation->AddInstruction(HloInstruction::CreateCall(
-        conditional->shape(), {conditional->mutable_operand(2)},
-        conditional->false_computation()));
-  }
+  call_op = computation->AddInstruction(HloInstruction::CreateCall(
+      conditional->shape(), {conditional->mutable_operand(branch_index + 1)},
+      conditional->branch_computation(branch_index)));
   conditional->SetupDerivedInstruction(call_op);
   TF_RETURN_IF_ERROR(computation->ReplaceInstruction(conditional, call_op));
   TF_RETURN_IF_ERROR(CallInliner::Inline(call_op).status());

@@ -19,7 +19,6 @@ limitations under the License.
 #include "tensorflow/core/lib/core/threadpool.h"
 
 namespace tensorflow {
-
 namespace {
 
 class BigtableClientOp : public OpKernel {
@@ -84,6 +83,8 @@ class BigtableClientOp : public OpKernel {
                 channel_args.SetMaxReceiveMessageSize(
                     max_receive_message_size_);
                 channel_args.SetUserAgentPrefix("tensorflow");
+                channel_args.SetInt(GRPC_ARG_KEEPALIVE_PERMIT_WITHOUT_CALLS, 0);
+                channel_args.SetInt(GRPC_ARG_KEEPALIVE_TIMEOUT_MS, 60 * 1000);
                 client_options.set_channel_arguments(channel_args);
                 std::shared_ptr<google::cloud::bigtable::DataClient> client =
                     google::cloud::bigtable::CreateDefaultDataClient(
@@ -170,6 +171,11 @@ class BigtableTableOp : public OpKernel {
 REGISTER_KERNEL_BUILDER(Name("BigtableTable").Device(DEVICE_CPU),
                         BigtableTableOp);
 
+}  // namespace
+
+namespace data {
+namespace {
+
 class ToBigtableOp : public AsyncOpKernel {
  public:
   explicit ToBigtableOp(OpKernelConstruction* ctx)
@@ -216,11 +222,11 @@ class ToBigtableOp : public AsyncOpKernel {
       OP_REQUIRES_OK_ASYNC(
           ctx, GetDatasetFromVariantTensor(ctx->input(1), &dataset), done);
 
-      IteratorContext iter_ctx = dataset::MakeIteratorContext(ctx);
       std::unique_ptr<IteratorBase> iterator;
       OP_REQUIRES_OK_ASYNC(
           ctx,
-          dataset->MakeIterator(&iter_ctx, "ToBigtableOpIterator", &iterator),
+          dataset->MakeIterator(IteratorContext(ctx), "ToBigtableOpIterator",
+                                &iterator),
           done);
 
       int64 timestamp_int;
@@ -243,9 +249,10 @@ class ToBigtableOp : public AsyncOpKernel {
         ::google::cloud::bigtable::BulkMutation mutation;
         // TODO(saeta): Make # of mutations configurable.
         for (uint64 i = 0; i < 100 && !end_of_sequence; ++i) {
-          OP_REQUIRES_OK_ASYNC(
-              ctx, iterator->GetNext(&iter_ctx, &components, &end_of_sequence),
-              done);
+          OP_REQUIRES_OK_ASYNC(ctx,
+                               iterator->GetNext(IteratorContext(ctx),
+                                                 &components, &end_of_sequence),
+                               done);
           if (!end_of_sequence) {
             OP_REQUIRES_OK_ASYNC(
                 ctx,
@@ -333,8 +340,8 @@ class ToBigtableOp : public AsyncOpKernel {
   }
 
   template <typename T>
-  Status ParseScalarArgument(OpKernelContext* ctx,
-                             const StringPiece& argument_name, T* output) {
+  Status ParseScalarArgument(OpKernelContext* ctx, StringPiece argument_name,
+                             T* output) {
     const Tensor* argument_t;
     TF_RETURN_IF_ERROR(ctx->input(argument_name, &argument_t));
     if (!TensorShapeUtils::IsScalar(argument_t->shape())) {
@@ -351,5 +358,5 @@ REGISTER_KERNEL_BUILDER(Name("DatasetToBigtable").Device(DEVICE_CPU),
                         ToBigtableOp);
 
 }  // namespace
-
+}  // namespace data
 }  // namespace tensorflow

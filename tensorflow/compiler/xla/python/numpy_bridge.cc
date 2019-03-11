@@ -14,6 +14,8 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/xla/python/numpy_bridge.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_format.h"
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/core/platform/logging.h"
@@ -23,6 +25,10 @@ namespace xla {
 namespace swig {
 
 namespace numpy {
+
+Safe_PyObjectPtr make_safe(PyObject* object) {
+  return Safe_PyObjectPtr(object);
+}
 
 int PrimitiveTypeToNumpyType(PrimitiveType primitive_type) {
   switch (primitive_type) {
@@ -52,6 +58,8 @@ int PrimitiveTypeToNumpyType(PrimitiveType primitive_type) {
       return NPY_FLOAT64;
     case C64:
       return NPY_COMPLEX64;
+    case C128:
+      return NPY_COMPLEX128;
     case TUPLE:
       return NPY_OBJECT;
     default:
@@ -87,6 +95,8 @@ PrimitiveType NumpyTypeToPrimitiveType(int np_type) {
       return F64;
     case NPY_COMPLEX64:
       return C64;
+    case NPY_COMPLEX128:
+      return C128;
     case NPY_OBJECT:
       return TUPLE;
     default:
@@ -109,6 +119,7 @@ bool NumpyTypeIsValid(int np_type) {
     case NPY_FLOAT32:
     case NPY_FLOAT64:
     case NPY_COMPLEX64:
+    case NPY_COMPLEX128:
     case NPY_OBJECT:
       return true;
     default:
@@ -116,28 +127,42 @@ bool NumpyTypeIsValid(int np_type) {
   }
 }
 
-PyObject* PyShapeInfoFromXlaShape(const Shape& shape) {
+Safe_PyObjectPtr PyShapeInfoFromXlaShape(const Shape& shape) {
   int np_typenum = PrimitiveTypeToNumpyType(shape.element_type());
   PyArray_Descr* np_dtype = PyArray_DescrFromType(np_typenum);
 
-  PyObject* dimensions;
-  if (ShapeUtil::IsTuple(shape)) {
+  Safe_PyObjectPtr dimensions;
+  if (shape.IsTuple()) {
     int num_elements = ShapeUtil::TupleElementCount(shape);
-    dimensions = PyTuple_New(ShapeUtil::TupleElementCount(shape));
+    dimensions = make_safe(PyTuple_New(ShapeUtil::TupleElementCount(shape)));
     for (int i = 0; i < num_elements; ++i) {
       PyTuple_SET_ITEM(
-          dimensions, i,
-          PyShapeInfoFromXlaShape(ShapeUtil::GetTupleElementShape(shape, i)));
+          dimensions.get(), i,
+          PyShapeInfoFromXlaShape(ShapeUtil::GetTupleElementShape(shape, i))
+              .release());
     }
   } else {
-    int rank = ShapeUtil::Rank(shape);
-    dimensions = PyTuple_New(rank);
+    int rank = shape.rank();
+    dimensions = make_safe(PyTuple_New(rank));
     for (int i = 0; i < rank; ++i) {
-      PyTuple_SET_ITEM(dimensions, i,
+      PyTuple_SET_ITEM(dimensions.get(), i,
                        LongToPyIntOrPyLong(ShapeUtil::GetDimension(shape, i)));
     }
   }
-  return PyTuple_Pack(2, np_dtype, dimensions);
+  return make_safe(PyTuple_Pack(2, np_dtype, dimensions.release()));
+}
+
+Safe_PyObjectPtr PyProgramShapeInfoFromXlaProgramShape(
+    const ProgramShape& shape) {
+  Safe_PyObjectPtr arg_shapes = make_safe(PyTuple_New(shape.parameters_size()));
+  for (int i = 0; i < shape.parameters_size(); ++i) {
+    PyTuple_SET_ITEM(arg_shapes.get(), i,
+                     PyShapeInfoFromXlaShape(shape.parameters(i)).release());
+  }
+
+  Safe_PyObjectPtr result_shape = PyShapeInfoFromXlaShape(shape.result());
+  return make_safe(
+      PyTuple_Pack(2, arg_shapes.release(), result_shape.release()));
 }
 
 // Precondition: o->ob_type == &PyArrayDescr_Type
@@ -149,9 +174,7 @@ static int NumpyTypenum(PyObject* o) {
 //
 // NOTE: this is an internal helper for conversion to a C++, and so decrefs r.
 static string ExtractStringAndDecref(PyObject* r) {
-  auto error = [r] {
-    return tensorflow::strings::Printf("<failed conversion of %p>", r);
-  };
+  auto error = [r] { return absl::StrFormat("<failed conversion of %p>", r); };
   if (r == nullptr) {
     return error();
   }
@@ -191,8 +214,8 @@ StatusOr<Shape> XlaShapeFromPyShape(PyObject* o) {
     PyObject* result =
         PyObject_CallMethod(o, const_cast<char*>(method.c_str()), nullptr);
     if (result == nullptr) {
-      return error(tensorflow::strings::StrCat(
-          "Failed to call method of shape object:", method));
+      return error(
+          absl::StrCat("Failed to call method of shape object:", method));
     }
     return result;
   };
@@ -281,15 +304,15 @@ StatusOr<Shape> XlaShapeFromPyShape(PyObject* o) {
 
 // Helper that retrieves the member with attr_name, stringifies it if is not
 // None, and returns it as a C++ string.
-static tensorflow::gtl::optional<string> GetAttrAsString(
-    PyObject* o, const string& attr_name) {
+static absl::optional<string> GetAttrAsString(PyObject* o,
+                                              const string& attr_name) {
   if (!PyObject_HasAttrString(o, attr_name.c_str())) {
-    return tensorflow::gtl::nullopt;
+    return absl::nullopt;
   }
   PyObject* attr = PyObject_GetAttrString(o, attr_name.c_str());
   if (attr == Py_None) {
     Py_DECREF(attr);
-    return tensorflow::gtl::nullopt;
+    return absl::nullopt;
   }
   string result = PyObjectCppStr(attr);
   Py_DECREF(attr);
@@ -298,82 +321,84 @@ static tensorflow::gtl::optional<string> GetAttrAsString(
 
 // Helper that retrieves the member with attr_name, checks that it is an integer
 // if it is not None, and returns it as an int32 value.
-static tensorflow::gtl::optional<int32> GetAttrAsInt32(
-    PyObject* o, const string& attr_name) {
+static absl::optional<int32> GetAttrAsInt32(PyObject* o,
+                                            const string& attr_name) {
   if (!PyObject_HasAttrString(o, attr_name.c_str())) {
-    return tensorflow::gtl::nullopt;
+    return absl::nullopt;
   }
   PyObject* attr = PyObject_GetAttrString(o, attr_name.c_str());
   if (attr == Py_None) {
     Py_DECREF(attr);
-    return tensorflow::gtl::nullopt;
+    return absl::nullopt;
   }
   if (!CheckPyIntOrLong(attr)) {
     Py_DECREF(attr);
-    return tensorflow::gtl::nullopt;
+    return absl::nullopt;
   }
   long value = PyIntOrPyLongToLong(attr);  // NOLINT
   Py_DECREF(attr);
   if (value == -1 && PyErr_Occurred() != nullptr) {
-    return tensorflow::gtl::nullopt;
+    return absl::nullopt;
   }
   if (static_cast<int32>(value) != value) {
-    return tensorflow::gtl::nullopt;
+    return absl::nullopt;
   }
   return value;
 }
 
 StatusOr<OpMetadata> OpMetadataFromPyObject(PyObject* o) {
   OpMetadata result;
-  tensorflow::gtl::optional<string> op_type = GetAttrAsString(o, "op_type");
+  absl::optional<string> op_type = GetAttrAsString(o, "op_type");
   if (op_type.has_value()) {
     result.set_op_type(op_type.value());
   }
-  tensorflow::gtl::optional<string> op_name = GetAttrAsString(o, "op_name");
+  absl::optional<string> op_name = GetAttrAsString(o, "op_name");
   if (op_name.has_value()) {
     result.set_op_name(op_name.value());
   }
-  tensorflow::gtl::optional<string> source_file =
-      GetAttrAsString(o, "source_file");
+  absl::optional<string> source_file = GetAttrAsString(o, "source_file");
   if (source_file.has_value()) {
     result.set_source_file(source_file.value());
   }
-  tensorflow::gtl::optional<int32> source_line =
-      GetAttrAsInt32(o, "source_line");
+  absl::optional<int32> source_line = GetAttrAsInt32(o, "source_line");
   if (source_line.has_value()) {
     result.set_source_line(source_line.value());
   }
   return result;
 }
 
-PyObject* PyObjectFromXlaLiteral(const LiteralSlice& literal) {
-  if (ShapeUtil::IsTuple(literal.shape())) {
+StatusOr<Safe_PyObjectPtr> PyObjectFromXlaLiteral(const LiteralSlice& literal) {
+  if (literal.shape().IsTuple()) {
     int num_elements = ShapeUtil::TupleElementCount(literal.shape());
-    PyObject* tuple = PyTuple_New(num_elements);
+    std::vector<Safe_PyObjectPtr> elems(num_elements);
     for (int i = 0; i < num_elements; i++) {
-      PyTuple_SET_ITEM(tuple, i,
-                       PyObjectFromXlaLiteral(LiteralSlice(literal, {i})));
+      TF_ASSIGN_OR_RETURN(elems[i],
+                          PyObjectFromXlaLiteral(LiteralSlice(literal, {i})));
+    }
+    Safe_PyObjectPtr tuple = make_safe(PyTuple_New(num_elements));
+    for (int i = 0; i < num_elements; i++) {
+      PyTuple_SET_ITEM(tuple.get(), i, elems[i].release());
     }
     return tuple;
   } else {
-    int rank = ShapeUtil::Rank(literal.shape());
+    int rank = literal.shape().rank();
     std::vector<long> dimensions(rank);  // NOLINT - PyArray requires a long*
     for (int i = 0; i < rank; i++) {
       dimensions[i] = ShapeUtil::GetDimension(literal.shape(), i);
     }
     int np_type = PrimitiveTypeToNumpyType(literal.shape().element_type());
-    PyObject* array =
-        PyArray_EMPTY(rank, dimensions.data(), np_type, /*fortran=*/0);
-    CopyLiteralToNumpyArray(np_type, literal,
-                            reinterpret_cast<PyArrayObject*>(array));
+    Safe_PyObjectPtr array = make_safe(
+        PyArray_EMPTY(rank, dimensions.data(), np_type, /*fortran=*/0));
+    TF_RETURN_IF_ERROR(CopyLiteralToNumpyArray(
+        np_type, literal, reinterpret_cast<PyArrayObject*>(array.get())));
     return array;
   }
 }
 
-StatusOr<std::unique_ptr<Literal>> XlaLiteralFromPyObject(PyObject* o) {
+StatusOr<Literal> XlaLiteralFromPyObject(PyObject* o) {
   if (PyTuple_Check(o)) {
     int num_elements = PyTuple_Size(o);
-    std::vector<std::unique_ptr<Literal>> elements;
+    std::vector<Literal> elements;
     elements.reserve(num_elements);
     for (int i = 0; i < num_elements; i++) {
       PyObject* element = PyTuple_GetItem(o, i);
@@ -391,8 +416,7 @@ StatusOr<std::unique_ptr<Literal>> XlaLiteralFromPyObject(PyObject* o) {
     int np_type = PyArray_TYPE(py_array);
     auto literal = LiteralUtil::CreateFromDimensions(
         NumpyTypeToPrimitiveType(np_type), dimensions);
-    TF_RETURN_IF_ERROR(
-        CopyNumpyArrayToLiteral(np_type, py_array, literal.get()));
+    TF_RETURN_IF_ERROR(CopyNumpyArrayToLiteral(np_type, py_array, &literal));
     return std::move(literal);
   } else {
     return InvalidArgument(
@@ -406,6 +430,12 @@ Status CopyNumpyArrayToLiteral(int np_type, PyArrayObject* py_array,
     case NPY_BOOL:
       CopyNumpyArrayToLiteral<bool>(py_array, literal);
       break;
+    case NPY_INT8:
+      CopyNumpyArrayToLiteral<int8>(py_array, literal);
+      break;
+    case NPY_INT16:
+      CopyNumpyArrayToLiteral<int16>(py_array, literal);
+      break;
     case NPY_INT32:
       CopyNumpyArrayToLiteral<int32>(py_array, literal);
       break;
@@ -414,6 +444,9 @@ Status CopyNumpyArrayToLiteral(int np_type, PyArrayObject* py_array,
       break;
     case NPY_UINT8:
       CopyNumpyArrayToLiteral<uint8>(py_array, literal);
+      break;
+    case NPY_UINT16:
+      CopyNumpyArrayToLiteral<uint16>(py_array, literal);
       break;
     case NPY_UINT32:
       CopyNumpyArrayToLiteral<uint32>(py_array, literal);
@@ -433,6 +466,9 @@ Status CopyNumpyArrayToLiteral(int np_type, PyArrayObject* py_array,
     case NPY_COMPLEX64:
       CopyNumpyArrayToLiteral<complex64>(py_array, literal);
       break;
+    case NPY_COMPLEX128:
+      CopyNumpyArrayToLiteral<complex128>(py_array, literal);
+      break;
     default:
       return InvalidArgument(
           "No XLA literal container for Numpy type number: %d", np_type);
@@ -440,11 +476,17 @@ Status CopyNumpyArrayToLiteral(int np_type, PyArrayObject* py_array,
   return Status::OK();
 }
 
-void CopyLiteralToNumpyArray(int np_type, const LiteralSlice& literal,
-                             PyArrayObject* py_array) {
+Status CopyLiteralToNumpyArray(int np_type, const LiteralSlice& literal,
+                               PyArrayObject* py_array) {
   switch (np_type) {
     case NPY_BOOL:
       CopyLiteralToNumpyArray<bool>(literal, py_array);
+      break;
+    case NPY_INT8:
+      CopyLiteralToNumpyArray<int8>(literal, py_array);
+      break;
+    case NPY_INT16:
+      CopyLiteralToNumpyArray<int16>(literal, py_array);
       break;
     case NPY_INT32:
       CopyLiteralToNumpyArray<int32>(literal, py_array);
@@ -454,6 +496,9 @@ void CopyLiteralToNumpyArray(int np_type, const LiteralSlice& literal,
       break;
     case NPY_UINT8:
       CopyLiteralToNumpyArray<uint8>(literal, py_array);
+      break;
+    case NPY_UINT16:
+      CopyLiteralToNumpyArray<uint16>(literal, py_array);
       break;
     case NPY_UINT32:
       CopyLiteralToNumpyArray<uint32>(literal, py_array);
@@ -473,9 +518,14 @@ void CopyLiteralToNumpyArray(int np_type, const LiteralSlice& literal,
     case NPY_COMPLEX64:
       CopyLiteralToNumpyArray<complex64>(literal, py_array);
       break;
+    case NPY_COMPLEX128:
+      CopyLiteralToNumpyArray<complex128>(literal, py_array);
+      break;
     default:
-      LOG(FATAL) << "No XLA literal container for Numpy type" << np_type;
+      return InvalidArgument(
+          "No XLA literal container for Numpy type number: %d", np_type);
   }
+  return Status::OK();
 }
 
 PyObject* LongToPyIntOrPyLong(long x) {  // NOLINT
@@ -516,6 +566,92 @@ PyObject* PyNumberToPyInt(PyObject* o) {
 }
 
 }  // namespace numpy
+
+bool GetIntAttr(PyObject* o, const char* field, int64* result) {
+  PyObject* fo = PyObject_GetAttrString(o, field);
+  if (!fo) {
+    return false;
+  }
+  const int64 value = numpy::PyIntOrPyLongToLong(fo);
+  if (value == -1 && PyErr_Occurred()) {
+    Py_DECREF(fo);
+    return false;
+  }
+  Py_DECREF(fo);
+  *result = value;
+  return true;
+}
+
+// Returns "ok"; true if there is no error, false if there was an error.
+bool HandleStringAttribute(PyObject* o, const char* attr_name,
+                           std::function<void(string s)> f) {
+  if (!PyObject_HasAttrString(o, attr_name)) {
+    return true;  // It's ok for the object to not have the attribute.
+  }
+  PyObject* attr = PyObject_GetAttrString(o, attr_name);
+  if (attr == nullptr) {
+    return false;  // An error occurred getting the attribute.
+  }
+  if (attr == Py_None) {
+    Py_DECREF(attr);
+    return true;  // The attribute is None, which we consider ok.
+  }
+#if PY_MAJOR_VERSION < 3
+  if (!PyString_Check(attr)) {
+    string message = absl::StrFormat("%s must be a string or none; got %s",
+                                     attr_name, numpy::PyObjectCppRepr(attr));
+    PyErr_SetString(PyExc_TypeError, message.c_str());
+    Py_DECREF(attr);
+    return false;  // Type error, not ok.
+  }
+  f(PyString_AsString(attr));
+#else
+  if (!PyBytes_Check(attr)) {
+    string message = absl::StrFormat("%s must be a string or none; got %s",
+                                     attr_name, numpy::PyObjectCppRepr(attr));
+    PyErr_SetString(PyExc_TypeError, message.c_str());
+    Py_DECREF(attr);
+    return false;  // Type error, not ok.
+  }
+  f(PyBytes_AsString(attr));
+#endif
+
+  Py_DECREF(attr);
+  return true;  // Handled string attribute, ok!
+}
+
+bool HandleRepeatedInt64Attribute(
+    PyObject* o, const char* attr_name,
+    tensorflow::protobuf::RepeatedField<tensorflow::protobuf_int64>* field) {
+  PyObject* seq = PyObject_GetAttrString(o, attr_name);
+  if (!seq) {
+    return false;
+  }
+
+  int length = PySequence_Size(seq);
+  if (length == -1) {
+    Py_DECREF(seq);
+    return false;
+  }
+
+  for (int i = 0; i < length; ++i) {
+    PyObject* item = PySequence_GetItem(seq, i);
+    if (!item) {
+      Py_DECREF(seq);
+      return false;
+    }
+    const int64 dimension = numpy::PyIntOrPyLongToLong(item);
+    if (dimension == -1 && PyErr_Occurred()) {
+      Py_DECREF(item);
+      Py_DECREF(seq);
+      return false;
+    }
+    *field->Add() = dimension;
+    Py_DECREF(item);
+  }
+  Py_DECREF(seq);
+  return true;
+}
 
 }  // namespace swig
 

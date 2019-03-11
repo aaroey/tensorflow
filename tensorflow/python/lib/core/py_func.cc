@@ -177,8 +177,7 @@ tensorflow::Status ExtractTensorFromEagerTensor(const PyObject* eager_tensor,
                                                 const Device* expected_device,
                                                 const Tensor** output_tensor) {
   auto handle = EagerTensor_Handle(eager_tensor)->handle;
-  Device* actual_device = nullptr;
-  TF_RETURN_IF_ERROR(handle->Device(&actual_device));
+  Device* actual_device = handle->device();
   TF_RETURN_IF_ERROR(handle->Tensor(output_tensor));
   // actual_device may be nullptr, which implies local CPU.
   if (expected_device == actual_device) return Status::OK();
@@ -186,19 +185,22 @@ tensorflow::Status ExtractTensorFromEagerTensor(const PyObject* eager_tensor,
   if (actual_device == nullptr) {
     if (!IsCPUDevice(expected_device)) {
       return errors::Internal(
-          "expected the py_func to return a Tensor backed by memory in ",
+          "Expected the py_func to return a Tensor backed by memory in ",
           expected_device_name,
           ", but is actually backed by local host memory. This is a bug.");
     }
     return Status::OK();
   }
-  const string& actual_device_name = actual_device->attributes().name();
-  if (actual_device_name != expected_device_name) {
-    return errors::Internal(
-        "expected the py_func to return a Tensor backed by memory in ",
-        expected_device_name, ", but is actually in ", actual_device_name,
-        ". This is a bug.");
-  }
+  // NOTE(ebrevdo): Here we could try comparing "actual_device_name"
+  // (actual_device->attributes()->name()) to expected_device_name and ensure
+  // they're the same.  However, this comparison fails if we create a ClusterDef
+  // on localhost, mainly because the Device created by Eager code doesn't match
+  // the device created by a session.  In this case, expected_device_name may
+  // contain "worker" but the Eager device name contains "localhost".  Since we
+  // can't easily access the true underlying device of "worker" here, we are not
+  // able to perform a proper comparison.  Furthermore, we can't check
+  // IsCPUDevice(actual_device) because the kernel's device may indeed be a
+  // GPU device (the python interpreter doesn't use it, however).
   return Status::OK();
 }
 
@@ -303,15 +305,14 @@ Status DoCallPyFunc(PyCall* call, bool* out_log_on_error) {
 class NumpyTensorBuffer : public TensorBuffer {
  public:
   NumpyTensorBuffer(PyArrayObject* array, size_t len, void* data)
-      : array_(array), len_(len), data_(data) {}
+      : TensorBuffer(data), array_(array), len_(len) {}
 
   ~NumpyTensorBuffer() override {
     // Note: The session::run wrapper is responsible for freeing this while
     // holding the GIL.
-    DelayedNumpyDecref(data_, len_, array_);
+    DelayedNumpyDecref(data(), len_, array_);
   }
 
-  void* data() const override { return data_; }
   size_t size() const override { return len_; }
   TensorBuffer* root_buffer() override { return this; }
   void FillAllocationDescription(AllocationDescription* proto) const override {
@@ -330,7 +331,6 @@ class NumpyTensorBuffer : public TensorBuffer {
  private:
   PyArrayObject* array_;
   size_t len_;
-  void* data_;
 };
 
 Status PyObjectToString(PyObject* obj, string* str) {
@@ -398,7 +398,7 @@ Status ConvertNdarrayToTensor(PyObject* obj, Tensor* ret) {
       TF_RETURN_IF_ERROR(NumericNpDTypeToTfDType(PyArray_TYPE(input), &dtype));
       CHECK(DataTypeCanUseMemcpy(dtype));
       if (reinterpret_cast<intptr_t>(PyArray_DATA(input)) %
-              EIGEN_MAX_ALIGN_BYTES !=
+              std::max(1, EIGEN_MAX_ALIGN_BYTES) !=
           0) {
         Tensor t(dtype, shape);
         StringPiece p = t.tensor_data();
@@ -488,6 +488,8 @@ class PyFuncOp : public OpKernel {
     eager_ = type_string() == "EagerPyFunc";
   }
 
+  bool IsExpensive() override { return true; }
+
   void Compute(OpKernelContext* ctx) override {
     PyCall call;
     call.token = token_;
@@ -497,8 +499,8 @@ class PyFuncOp : public OpKernel {
       // `DeviceBase`; attempt to downcast.
       call.device = dynamic_cast<Device*>(ctx->device());
       if (call.device == nullptr) {
-        ctx->CtxFailureWithWarning(
-            errors::Internal("Unrecognized device class"));
+        ctx->CtxFailureWithWarning(errors::Internal(
+            "Unrecognized device class: ", ctx->device()->name()));
         return;
       }
     }
@@ -506,6 +508,17 @@ class PyFuncOp : public OpKernel {
     for (int i = 0; i < ctx->num_inputs(); ++i) {
       call.ins.push_back(ctx->input(i));
     }
+
+    // NOTE(mrry): There is a potential time-of-check-to-time-of-use race here.
+    // because it is possible that `Py_Finalize()` could be called in another
+    // thread between this check and the  call to `PyGILState_Ensure()`, which
+    // will abort the process if `Py_Finalize()` has been called. A more robust
+    // solution would be welcome, but it is not obvious how to make this work
+    // using the current Python C API.
+    OP_REQUIRES(ctx, Py_IsInitialized(),
+                errors::FailedPrecondition(
+                    "Python interpreter state is not initialized. "
+                    "The process may be terminated."));
 
     PyGILState_STATE py_threadstate;
     py_threadstate = PyGILState_Ensure();

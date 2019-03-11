@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_KERNELS_SCATTER_FUNCTOR_GPU_CU_H_
-#define TENSORFLOW_KERNELS_SCATTER_FUNCTOR_GPU_CU_H_
+#ifndef TENSORFLOW_CORE_KERNELS_SCATTER_FUNCTOR_GPU_CU_H_
+#define TENSORFLOW_CORE_KERNELS_SCATTER_FUNCTOR_GPU_CU_H_
 
 #if GOOGLE_CUDA
 
@@ -127,10 +127,10 @@ struct ScatterFunctor<GPUDevice, T, Index, op> {
     const Index indices_size = indices.size();
     const Index updates_size = updates.size();
     CudaLaunchConfig config = GetCudaLaunchConfig(updates_size, d);
-    scatter_op_gpu::ScatterOpCustomKernel<T, Index, op>
-        <<<config.block_count, config.thread_per_block, 0, d.stream()>>>(
-            params.data(), updates.data(), indices.data(), first_dim_size,
-            updates_size, indices_size);
+    TF_CHECK_OK(CudaLaunchKernel(
+        scatter_op_gpu::ScatterOpCustomKernel<T, Index, op>, config.block_count,
+        config.thread_per_block, 0, d.stream(), params.data(), updates.data(),
+        indices.data(), first_dim_size, updates_size, indices_size));
     return -1;
   }
 };
@@ -148,10 +148,11 @@ struct ScatterScalarFunctor<GPUDevice, T, Index, op> {
     const Index indices_size = indices.size();
     const Index synthesized_updates_size = indices_size * params.dimension(1);
     CudaLaunchConfig config = GetCudaLaunchConfig(synthesized_updates_size, d);
-    scatter_op_gpu::ScatterScalarOpCustomKernel<T, Index, op>
-        <<<config.block_count, config.thread_per_block, 0, d.stream()>>>(
-            params.data(), update.data(), indices.data(), first_dim_size,
-            indices_size, synthesized_updates_size);
+    TF_CHECK_OK(CudaLaunchKernel(
+        scatter_op_gpu::ScatterScalarOpCustomKernel<T, Index, op>,
+        config.block_count, config.thread_per_block, 0, d.stream(),
+        params.data(), update.data(), indices.data(), first_dim_size,
+        indices_size, synthesized_updates_size));
     return -1;
   }
 };
@@ -161,4 +162,4 @@ struct ScatterScalarFunctor<GPUDevice, T, Index, op> {
 
 #endif  // GOOGLE_CUDA
 
-#endif  // TENSORFLOW_KERNELS_SCATTER_FUNCTOR_GPU_CU_H_
+#endif  // TENSORFLOW_CORE_KERNELS_SCATTER_FUNCTOR_GPU_CU_H_

@@ -15,12 +15,13 @@ limitations under the License.
 
 #include "tensorflow/compiler/xla/service/bfloat16_normalization.h"
 
+#include "absl/types/span.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/hlo_opcode.h"
+#include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
-#include "tensorflow/core/lib/gtl/array_slice.h"
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/platform/types.h"
 
@@ -33,11 +34,6 @@ class BFloat16NormalizationVisitor : public DfsHloVisitorWithDefault {
       : computation_(computation), bfloat16_support_(bfloat16_support) {}
 
   Status DefaultAction(HloInstruction* hlo) override;
-
-  // Special handling for cross-replica-sum and sort which can have a tuple
-  // output.
-  Status HandleCrossReplicaSum(HloInstruction* crs) override;
-  Status HandleSort(HloInstruction* sort) override;
 
   static bool Run(HloComputation* computation,
                   const BFloat16Support* bfloat16_support) {
@@ -73,8 +69,7 @@ class BFloat16NormalizationVisitor : public DfsHloVisitorWithDefault {
   // Inserts conversion HLOs to replace the called computations' BF16
   // operands/outputs to F32.
   Status ConvertCalledComputations(
-      HloInstruction* hlo,
-      tensorflow::gtl::ArraySlice<HloComputation*> bf16_called_comps);
+      HloInstruction* hlo, absl::Span<HloComputation* const> bf16_called_comps);
 
   HloComputation* computation_;
   const BFloat16Support* bfloat16_support_;
@@ -89,7 +84,12 @@ Status BFloat16NormalizationVisitor::InsertConvertAfterOutput(
   auto convert = computation->AddInstruction(
       HloInstruction::CreateConvert(hlo->shape(), hlo));
   for (auto* user : materialized_users) {
-    TF_RETURN_IF_ERROR(hlo->ReplaceUseWith(user, convert));
+    if (user->opcode() == HloOpcode::kConvert &&
+        user->shape().element_type() == F32) {
+      TF_RETURN_IF_ERROR(user->ReplaceAllUsesWith(hlo));
+    } else {
+      TF_RETURN_IF_ERROR(hlo->ReplaceUseWith(user, convert));
+    }
   }
   if (is_root) {
     computation->set_root_instruction(convert);
@@ -118,8 +118,7 @@ Status BFloat16NormalizationVisitor::InsertConvertBeforeOperand(
 }
 
 Status BFloat16NormalizationVisitor::ConvertCalledComputations(
-    HloInstruction* hlo,
-    tensorflow::gtl::ArraySlice<HloComputation*> bf16_called_comps) {
+    HloInstruction* hlo, absl::Span<HloComputation* const> bf16_called_comps) {
   std::map<HloComputation*, HloComputation*> cloned_computations;
   for (auto& comp : bf16_called_comps) {
     auto cloned = comp->parent()->AddEmbeddedComputation(comp->Clone());
@@ -148,23 +147,6 @@ Status BFloat16NormalizationVisitor::ConvertCalledComputations(
     }
   }
   return Status::OK();
-}
-
-Status BFloat16NormalizationVisitor::HandleCrossReplicaSum(
-    HloInstruction* crs) {
-  if (!ShapeUtil::IsTuple(crs->shape())) {
-    return HandleInstruction(crs);
-  } else {
-    return HandleMultipleOutputs(crs);
-  }
-}
-
-Status BFloat16NormalizationVisitor::HandleSort(HloInstruction* sort) {
-  if (!ShapeUtil::IsTuple(sort->shape())) {
-    return HandleInstruction(sort);
-  } else {
-    return HandleMultipleOutputs(sort);
-  }
 }
 
 Status BFloat16NormalizationVisitor::HandleMultipleOutputs(
@@ -228,6 +210,28 @@ Status BFloat16NormalizationVisitor::HandleMultipleOutputs(
     return Status::OK();
   }
 
+  std::vector<HloComputation*> bf16_called_comps;
+  for (auto* comp : hlo->called_computations()) {
+    bool comp_has_bf16 = false;
+    if (comp->root_instruction()->shape().element_type() == F32) {
+      f32_count += 1;
+    } else if (comp->root_instruction()->shape().element_type() == BF16) {
+      bf16_count += 1;
+      comp_has_bf16 = true;
+    }
+    for (auto* param : comp->parameter_instructions()) {
+      if (param->shape().element_type() == F32) {
+        f32_count += 1;
+      } else if (param->shape().element_type() == BF16) {
+        bf16_count += 1;
+        comp_has_bf16 = true;
+      }
+    }
+    if (comp_has_bf16) {
+      bf16_called_comps.push_back(comp);
+    }
+  }
+
   std::vector<HloInstruction*> materialized_users = hlo->users();
   std::vector<HloInstruction*> output_elements(hlo->operand_count());
   auto original_shape = hlo->shape();
@@ -254,8 +258,12 @@ Status BFloat16NormalizationVisitor::HandleMultipleOutputs(
   for (auto* user : materialized_users) {
     TF_RETURN_IF_ERROR(hlo->ReplaceUseWith(user, tuple));
   }
+  bool is_root = computation_->root_instruction() == hlo;
+  if (is_root) {
+    computation_->set_root_instruction(tuple);
+  }
   *tuple->mutable_shape() = original_shape;
-  return Status::OK();
+  return ConvertCalledComputations(hlo, bf16_called_comps);
 }
 
 Status BFloat16NormalizationVisitor::HandleInstruction(HloInstruction* hlo) {
@@ -365,11 +373,9 @@ Status BFloat16NormalizationVisitor::HandleInstruction(HloInstruction* hlo) {
 
 Status BFloat16NormalizationVisitor::DefaultAction(HloInstruction* hlo) {
   // Do not change instructions related to entry and exit of a computation,
-  // tuples, fusion, convert, and control flow.
+  // tuples, fusion, convert, side-effecting instructions, and control flow.
   if (hlo->opcode() == HloOpcode::kTuple ||            //
       hlo->opcode() == HloOpcode::kGetTupleElement ||  //
-      hlo->opcode() == HloOpcode::kInfeed ||           //
-      hlo->opcode() == HloOpcode::kOutfeed ||          //
       hlo->opcode() == HloOpcode::kConstant ||         //
       hlo->opcode() == HloOpcode::kParameter ||        //
       hlo->opcode() == HloOpcode::kFusion ||           //
@@ -377,8 +383,15 @@ Status BFloat16NormalizationVisitor::DefaultAction(HloInstruction* hlo) {
       hlo->opcode() == HloOpcode::kCall ||             //
       hlo->opcode() == HloOpcode::kCustomCall ||       //
       hlo->opcode() == HloOpcode::kWhile ||            //
-      hlo->opcode() == HloOpcode::kConditional) {
+      hlo->opcode() == HloOpcode::kConditional ||      //
+      hlo->HasSideEffectNoRecurse()) {
     return Status::OK();
+  }
+  // TODO(b/112040122): Correctly normalize variadic reduce.
+  if ((hlo->opcode() == HloOpcode::kSort ||
+       hlo->opcode() == HloOpcode::kAllReduce) &&
+      hlo->shape().IsTuple()) {
+    return HandleMultipleOutputs(hlo);
   }
   return HandleInstruction(hlo);
 }

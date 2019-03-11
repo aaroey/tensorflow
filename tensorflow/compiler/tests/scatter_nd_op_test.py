@@ -119,7 +119,7 @@ class ScatterNdTest(xla_test.XLATestCase):
         self._VariableRankTest(np_scatter, tf_scatter, vtype, itype)
 
   def _runScatterNd(self, indices, updates, shape):
-    with self.test_session():
+    with self.cached_session():
       updates_placeholder = array_ops.placeholder(updates.dtype)
       indices_placeholder = array_ops.placeholder(indices.dtype)
       with self.test_scope():
@@ -133,6 +133,12 @@ class ScatterNdTest(xla_test.XLATestCase):
     updates = np.array([9, 10, 11, 12], dtype=np.float32)
     expected = np.array([0, 11, 0, 10, 9, 0, 0, 12], dtype=np.int32)
     self.assertAllEqual(expected, self._runScatterNd(indices, updates, [8]))
+
+  def testRepeatedIndices(self):
+    indices = np.array([[0], [1], [0], [1]], dtype=np.int32)
+    updates = np.array([9, 10, 11, 12], dtype=np.float32)
+    expected = np.array([20, 22], dtype=np.int32)
+    self.assertAllEqual(expected, self._runScatterNd(indices, updates, [2]))
 
   def testSimple2(self):
     indices = np.array([[1, 0], [1, 1]], dtype=np.int32)

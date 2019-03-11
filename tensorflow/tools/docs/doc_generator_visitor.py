@@ -194,10 +194,11 @@ class DocGeneratorVisitor(object):
       contrib_score = 1
 
     while parts:
-      parts.pop()
       container = self._index['.'.join(parts)]
       if tf_inspect.ismodule(container):
         break
+      parts.pop()
+
     module_length = len(parts)
     if len(parts) == 2:
       # `tf.submodule.thing` is better than `tf.thing`
@@ -269,7 +270,6 @@ class DocGeneratorVisitor(object):
         # Choose the master name with a lexical sort on the tuples returned by
         # by _score_name.
         master_name = min(names, key=self._score_name)
-        print(names, master_name)
 
       duplicates[master_name] = names
       for name in names:

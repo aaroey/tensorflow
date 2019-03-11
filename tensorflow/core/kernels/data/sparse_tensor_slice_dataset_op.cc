@@ -14,25 +14,25 @@ limitations under the License.
 ==============================================================================*/
 #include <numeric>
 
+#include "tensorflow/core/framework/dataset.h"
 #include "tensorflow/core/framework/partial_tensor_shape.h"
 #include "tensorflow/core/framework/register_types.h"
 #include "tensorflow/core/framework/tensor.h"
-#include "tensorflow/core/kernels/data/dataset.h"
 #include "tensorflow/core/util/sparse/sparse_tensor.h"
 
 namespace tensorflow {
-
+namespace data {
 namespace {
 
-// See documentation in ../ops/dataset_ops.cc for a high-level
+// See documentation in ../../ops/dataset_ops.cc for a high-level
 // description of the following op.
 
 template <typename T>
-class Dataset : public GraphDatasetBase {
+class Dataset : public DatasetBase {
  public:
   explicit Dataset(OpKernelContext* ctx,
                    const sparse::SparseTensor& sparse_tensor)
-      : GraphDatasetBase(ctx),
+      : DatasetBase(DatasetContext(ctx)),
         sparse_tensor_(sparse_tensor),
         dtypes_({DT_INT64, sparse_tensor.dtype(), DT_INT64}),
         shapes_({{-1, sparse_tensor.dims() - 1},
@@ -41,8 +41,8 @@ class Dataset : public GraphDatasetBase {
 
   std::unique_ptr<IteratorBase> MakeIteratorInternal(
       const string& prefix) const override {
-    return std::unique_ptr<IteratorBase>(
-        new Iterator({this, strings::StrCat(prefix, "::SparseTensorSlice")}));
+    return absl::make_unique<Iterator>(typename Iterator::Params{
+        this, strings::StrCat(prefix, "::SparseTensorSlice")});
   }
 
   const DataTypeVector& output_dtypes() const override { return dtypes_; }
@@ -54,8 +54,11 @@ class Dataset : public GraphDatasetBase {
     return "SparseTensorSliceDatasetOp::Dataset";
   }
 
+  int64 Cardinality() const override { return sparse_tensor_.shape()[0]; }
+
  protected:
-  Status AsGraphDefInternal(DatasetGraphDefBuilder* b,
+  Status AsGraphDefInternal(SerializationContext* ctx,
+                            DatasetGraphDefBuilder* b,
                             Node** output) const override {
     Node* indices_node;
     TF_RETURN_IF_ERROR(b->AddTensor(sparse_tensor_.indices(), &indices_node));
@@ -151,6 +154,11 @@ class Dataset : public GraphDatasetBase {
     }
 
    protected:
+    std::shared_ptr<model::Node> CreateNode(
+        IteratorContext* ctx, model::Node::Args args) const override {
+      return model::MakeSourceNode(std::move(args));
+    }
+
     Status SaveInternal(IteratorStateWriter* writer) override {
       mutex_lock l(mu_);
       TF_RETURN_IF_ERROR(writer->WriteScalar(Iterator::full_name("i"), i_));
@@ -273,5 +281,5 @@ TF_CALL_DATASET_TYPES(REGISTER_DATASET_KERNEL);
 #undef REGISTER_DATASET_KERNEL
 
 }  // namespace
-
+}  // namespace data
 }  // namespace tensorflow

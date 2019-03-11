@@ -18,7 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from tensorflow.contrib.data.python.ops import prefetching_ops
+from tensorflow.python.data.experimental.ops import prefetching_ops
 from tensorflow.python.data.ops import iterator_ops
 from tensorflow.python.eager import context
 from tensorflow.python.framework import ops
@@ -28,7 +28,7 @@ class Iterator(iterator_ops.EagerIterator):
   """An iterator producing tf.Tensor objects from a tf.data.Dataset.
 
   NOTE: Unlike the iterator created by the
-  @{tf.data.Dataset.make_one_shot_iterator} method, this class enables
+  `tf.data.Dataset.make_one_shot_iterator` method, this class enables
   additional experimental functionality, such as prefetching to the GPU.
   """
 
@@ -52,12 +52,6 @@ class Iterator(iterator_ops.EagerIterator):
       TypeError: If `dataset` is an unsupported type.
       RuntimeError: When invoked without eager execution enabled.
     """
-    if isinstance(dataset, prefetching_ops._PrefetchToDeviceDataset):  # pylint: disable=protected-access
-      raise TypeError(
-          "`tf.contrib.data.prefetch_to_device()` is not compatible with "
-          "`tf.contrib.eager.Iterator`. Use `for ... in dataset:` to iterate "
-          "over the dataset instead.")
-
     if not context.context().device_spec.device_type:
       is_remote_device = False
     else:

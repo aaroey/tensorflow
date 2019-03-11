@@ -17,6 +17,7 @@ limitations under the License.
 #include "tensorflow/core/framework/attr_value.pb.h"
 #include "tensorflow/core/framework/attr_value_util.h"
 #include "tensorflow/core/framework/tensor.h"
+#include "tensorflow/core/framework/tensor.pb.h"
 #include "tensorflow/core/framework/tensor_shape.h"
 #include "tensorflow/core/framework/tensor_shape.pb.h"
 #include "tensorflow/core/framework/types.h"
@@ -27,9 +28,34 @@ namespace tensorflow {
 namespace grappler {
 
 namespace {
+
+// TODO(dyoon): Consider to use this Test class for all the test cases, and then
+// remove friend in the OpLevelCostEstimator class header.
+class TestOpLevelCostEstimator : public OpLevelCostEstimator {
+ public:
+  TestOpLevelCostEstimator() {
+    compute_memory_overlap_ = true;
+    device_info_ = DeviceInfo();
+  }
+  ~TestOpLevelCostEstimator() override {}
+
+  void SetDeviceInfo(const DeviceInfo& device_info) {
+    device_info_ = device_info;
+  }
+
+  void SetComputeMemoryOverlap(bool value) { compute_memory_overlap_ = value; }
+
+ protected:
+  DeviceInfo GetDeviceInfo(const DeviceProperties& device) const override {
+    return device_info_;
+  }
+
+  DeviceInfo device_info_;
+};
+
 // Wrangles the minimum number of proto fields to set up a matrix.
-void DescribeMatrix(int rows, int columns, OpInfo* op_features) {
-  auto input = op_features->add_inputs();
+void DescribeMatrix(int rows, int columns, OpInfo* op_info) {
+  auto input = op_info->add_inputs();
   auto shape = input->mutable_shape();
   auto shape_rows = shape->add_dim();
   shape_rows->set_size(rows);
@@ -38,8 +64,8 @@ void DescribeMatrix(int rows, int columns, OpInfo* op_features) {
   input->set_dtype(DT_FLOAT);
 }
 
-void SetCpuDevice(OpInfo* op_features) {
-  auto device = op_features->mutable_device();
+void SetCpuDevice(OpInfo* op_info) {
+  auto device = op_info->mutable_device();
   device->set_type("CPU");
   device->set_num_cores(10);
   device->set_bandwidth(10000000);  // 10000000 KB/s = 10 GB/s
@@ -412,15 +438,14 @@ class OpLevelCostEstimatorTest : public ::testing::Test {
     return estimator_.PredictCosts(op_context);
   }
 
-  int64 CountMatMulOperations(const OpInfo& op_features,
+  int64 CountMatMulOperations(const OpInfo& op_info,
                               bool* found_unknown_shapes) const {
-    return estimator_.CountMatMulOperations(op_features, found_unknown_shapes);
+    return estimator_.CountMatMulOperations(op_info, found_unknown_shapes);
   }
 
-  int64 CountBatchMatMulOperations(const OpInfo& op_features,
+  int64 CountBatchMatMulOperations(const OpInfo& op_info,
                                    bool* found_unknown_shapes) const {
-    return estimator_.CountBatchMatMulOperations(op_features,
-                                                 found_unknown_shapes);
+    return estimator_.CountBatchMatMulOperations(op_info, found_unknown_shapes);
   }
 
   void SetComputeMemoryOverlap(bool value) {
@@ -474,6 +499,26 @@ class OpLevelCostEstimatorTest : public ::testing::Test {
   OpLevelCostEstimator estimator_;
 };
 
+TEST_F(OpLevelCostEstimatorTest, TestPersistentOpCosts) {
+  OpContext op_context;
+  SetCpuDevice(&op_context.op_info);
+  std::unordered_set<string> persisent_ops = {
+      "Const",       "Variable",       "VariableV2", "AutoReloadVariable",
+      "VarHandleOp", "ReadVariableOp",
+  };
+  // Minmum cost for all persistent ops.
+  for (const auto& op : persisent_ops) {
+    op_context.op_info.set_op(op);
+    auto cost = estimator_.PredictCosts(op_context);
+    EXPECT_EQ(Costs::Duration(0), cost.memory_time);
+    EXPECT_EQ(Costs::Duration(1), cost.compute_time);
+    EXPECT_EQ(Costs::Duration(1), cost.execution_time);
+    EXPECT_EQ(1, cost.num_ops_total);
+    EXPECT_FALSE(cost.inaccurate);
+    EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
+  }
+}
+
 TEST_F(OpLevelCostEstimatorTest, TestGatherCosts) {
   OpContext op_context;
   SetCpuDevice(&op_context.op_info);
@@ -488,7 +533,9 @@ TEST_F(OpLevelCostEstimatorTest, TestGatherCosts) {
   EXPECT_EQ(Costs::Duration(130), cost.memory_time);
   EXPECT_EQ(Costs::Duration(16), cost.compute_time);
   EXPECT_EQ(Costs::Duration(146), cost.execution_time);
+  EXPECT_EQ(1, cost.num_ops_total);
   EXPECT_FALSE(cost.inaccurate);
+  EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
 }
 
 TEST_F(OpLevelCostEstimatorTest, TestGatherCostsWithoutOutput) {
@@ -504,7 +551,9 @@ TEST_F(OpLevelCostEstimatorTest, TestGatherCostsWithoutOutput) {
   EXPECT_EQ(Costs::Duration(0), cost.memory_time);
   EXPECT_EQ(Costs::Duration(0), cost.compute_time);
   EXPECT_EQ(Costs::Duration(0), cost.execution_time);
+  EXPECT_EQ(1, cost.num_ops_total);
   EXPECT_TRUE(cost.inaccurate);
+  EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
 }
 
 TEST_F(OpLevelCostEstimatorTest, TestSliceCosts) {
@@ -522,7 +571,9 @@ TEST_F(OpLevelCostEstimatorTest, TestSliceCosts) {
   EXPECT_EQ(Costs::Duration(81), cost.memory_time);
   EXPECT_EQ(Costs::Duration(10), cost.compute_time);
   EXPECT_EQ(Costs::Duration(91), cost.execution_time);
+  EXPECT_EQ(1, cost.num_ops_total);
   EXPECT_FALSE(cost.inaccurate);
+  EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
 }
 
 TEST_F(OpLevelCostEstimatorTest, BiasAddExecutionTime) {
@@ -530,7 +581,9 @@ TEST_F(OpLevelCostEstimatorTest, BiasAddExecutionTime) {
   EXPECT_EQ(Costs::Duration(8400), cost.memory_time);
   EXPECT_EQ(Costs::Duration(1000), cost.compute_time);
   EXPECT_EQ(Costs::Duration(9400), cost.execution_time);
+  EXPECT_EQ(1, cost.num_ops_total);
   EXPECT_FALSE(cost.inaccurate);
+  EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
 }
 
 TEST_F(OpLevelCostEstimatorTest, Conv2DExecutionTime) {
@@ -538,7 +591,9 @@ TEST_F(OpLevelCostEstimatorTest, Conv2DExecutionTime) {
   EXPECT_EQ(Costs::Duration(233780), cost.memory_time);
   EXPECT_EQ(Costs::Duration(354877440), cost.compute_time);
   EXPECT_EQ(Costs::Duration(355111220), cost.execution_time);
+  EXPECT_EQ(1, cost.num_ops_total);
   EXPECT_FALSE(cost.inaccurate);
+  EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
 }
 
 TEST_F(OpLevelCostEstimatorTest, DepthwiseConv2dNativeExecutionTime) {
@@ -547,7 +602,9 @@ TEST_F(OpLevelCostEstimatorTest, DepthwiseConv2dNativeExecutionTime) {
   EXPECT_EQ(Costs::Duration(112340), cost.memory_time);
   EXPECT_EQ(Costs::Duration(4158720), cost.compute_time);
   EXPECT_EQ(Costs::Duration(4271060), cost.execution_time);
+  EXPECT_EQ(1, cost.num_ops_total);
   EXPECT_FALSE(cost.inaccurate);
+  EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
 }
 
 TEST_F(OpLevelCostEstimatorTest, DummyExecutionTime) {
@@ -555,7 +612,9 @@ TEST_F(OpLevelCostEstimatorTest, DummyExecutionTime) {
   EXPECT_EQ(Costs::Duration(2000), cost.memory_time);
   EXPECT_EQ(Costs::Duration(0), cost.compute_time);
   EXPECT_EQ(Costs::Duration(2000), cost.execution_time);
+  EXPECT_EQ(1, cost.num_ops_total);
   EXPECT_TRUE(cost.inaccurate);
+  EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
 }
 
 TEST_F(OpLevelCostEstimatorTest, ExecutionTimeSumOrMax) {
@@ -564,7 +623,9 @@ TEST_F(OpLevelCostEstimatorTest, ExecutionTimeSumOrMax) {
   EXPECT_EQ(Costs::Duration(2000), cost.memory_time);
   EXPECT_EQ(Costs::Duration(0), cost.compute_time);
   EXPECT_EQ(Costs::Duration(2000), cost.execution_time);  // max(2000, 200)
+  EXPECT_EQ(1, cost.num_ops_total);
   EXPECT_TRUE(cost.inaccurate);
+  EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
   SetComputeMemoryOverlap(false);  // Set it back to default.
 }
 
@@ -576,7 +637,9 @@ TEST_F(OpLevelCostEstimatorTest,
   EXPECT_EQ(Costs::Duration(825345), cost.memory_time);
   EXPECT_EQ(Costs::Duration(355321038), cost.compute_time);
   EXPECT_EQ(Costs::Duration(356146383), cost.execution_time);
+  EXPECT_EQ(1, cost.num_ops_total);
   EXPECT_FALSE(cost.inaccurate);
+  EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
 }
 
 TEST_F(OpLevelCostEstimatorTest, FusedConv2DBiasActivationNCHW_HWIO) {
@@ -586,7 +649,9 @@ TEST_F(OpLevelCostEstimatorTest, FusedConv2DBiasActivationNCHW_HWIO) {
   EXPECT_EQ(Costs::Duration(1416808), cost.memory_time);
   EXPECT_EQ(Costs::Duration(355616770), cost.compute_time);
   EXPECT_EQ(Costs::Duration(357033578), cost.execution_time);
+  EXPECT_EQ(1, cost.num_ops_total);
   EXPECT_FALSE(cost.inaccurate);
+  EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
 }
 
 TEST_F(OpLevelCostEstimatorTest, FusedConv2DBiasActivationNCHW_OIHW) {
@@ -596,7 +661,9 @@ TEST_F(OpLevelCostEstimatorTest, FusedConv2DBiasActivationNCHW_OIHW) {
   EXPECT_EQ(Costs::Duration(1416808), cost.memory_time);
   EXPECT_EQ(Costs::Duration(355616770), cost.compute_time);
   EXPECT_EQ(Costs::Duration(357033578), cost.execution_time);
+  EXPECT_EQ(1, cost.num_ops_total);
   EXPECT_FALSE(cost.inaccurate);
+  EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
 }
 
 TEST_F(OpLevelCostEstimatorTest, FusedConv2DBiasActivationNHWC_HWIO) {
@@ -606,7 +673,9 @@ TEST_F(OpLevelCostEstimatorTest, FusedConv2DBiasActivationNHWC_HWIO) {
   EXPECT_EQ(Costs::Duration(1416808), cost.memory_time);
   EXPECT_EQ(Costs::Duration(355616770), cost.compute_time);
   EXPECT_EQ(Costs::Duration(357033578), cost.execution_time);
+  EXPECT_EQ(1, cost.num_ops_total);
   EXPECT_FALSE(cost.inaccurate);
+  EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
 }
 
 TEST_F(OpLevelCostEstimatorTest, FusedConv2DBiasActivationNHWC_OIHW) {
@@ -616,7 +685,9 @@ TEST_F(OpLevelCostEstimatorTest, FusedConv2DBiasActivationNHWC_OIHW) {
   EXPECT_EQ(Costs::Duration(1416808), cost.memory_time);
   EXPECT_EQ(Costs::Duration(355616770), cost.compute_time);
   EXPECT_EQ(Costs::Duration(357033578), cost.execution_time);
+  EXPECT_EQ(1, cost.num_ops_total);
   EXPECT_FALSE(cost.inaccurate);
+  EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
 }
 
 // TODO(yaozhang): Update once NCHW_VECT_C is supported.
@@ -627,7 +698,9 @@ TEST_F(OpLevelCostEstimatorTest, FusedConv2DBiasActivationNCHW_VECT_C_OIHW) {
   EXPECT_EQ(Costs::Duration(0), cost.memory_time);
   EXPECT_EQ(Costs::Duration(0), cost.compute_time);
   EXPECT_EQ(Costs::Duration(0), cost.execution_time);
+  EXPECT_EQ(1, cost.num_ops_total);
   EXPECT_TRUE(cost.inaccurate);
+  EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
 }
 
 // TODO(yaozhang): Update once OIHW_VECT_I is supported.
@@ -638,7 +711,9 @@ TEST_F(OpLevelCostEstimatorTest, FusedConv2DBiasActivationNCHW_OIHW_VECT_I) {
   EXPECT_EQ(Costs::Duration(0), cost.memory_time);
   EXPECT_EQ(Costs::Duration(0), cost.compute_time);
   EXPECT_EQ(Costs::Duration(0), cost.execution_time);
+  EXPECT_EQ(1, cost.num_ops_total);
   EXPECT_TRUE(cost.inaccurate);
+  EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
 }
 
 TEST_F(OpLevelCostEstimatorTest, MulExecutionTime) {
@@ -646,7 +721,9 @@ TEST_F(OpLevelCostEstimatorTest, MulExecutionTime) {
   EXPECT_EQ(Costs::Duration(2000), cost.memory_time);
   EXPECT_EQ(Costs::Duration(200), cost.compute_time);
   EXPECT_EQ(Costs::Duration(2200), cost.execution_time);
+  EXPECT_EQ(1, cost.num_ops_total);
   EXPECT_FALSE(cost.inaccurate);
+  EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
 }
 
 TEST_F(OpLevelCostEstimatorTest, MulBroadcastExecutionTime) {
@@ -654,7 +731,9 @@ TEST_F(OpLevelCostEstimatorTest, MulBroadcastExecutionTime) {
   EXPECT_EQ(Costs::Duration(3600), cost.memory_time);
   EXPECT_EQ(Costs::Duration(400), cost.compute_time);
   EXPECT_EQ(Costs::Duration(4000), cost.execution_time);
+  EXPECT_EQ(1, cost.num_ops_total);
   EXPECT_FALSE(cost.inaccurate);
+  EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
 }
 
 TEST_F(OpLevelCostEstimatorTest, ModExecutionTime) {
@@ -662,7 +741,9 @@ TEST_F(OpLevelCostEstimatorTest, ModExecutionTime) {
   EXPECT_EQ(Costs::Duration(2000), cost.memory_time);
   EXPECT_EQ(Costs::Duration(1600), cost.compute_time);
   EXPECT_EQ(Costs::Duration(3600), cost.execution_time);
+  EXPECT_EQ(1, cost.num_ops_total);
   EXPECT_FALSE(cost.inaccurate);
+  EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
 }
 
 TEST_F(OpLevelCostEstimatorTest, ReluExecutionTime) {
@@ -670,28 +751,87 @@ TEST_F(OpLevelCostEstimatorTest, ReluExecutionTime) {
   EXPECT_EQ(Costs::Duration(800), cost.memory_time);
   EXPECT_EQ(Costs::Duration(100), cost.compute_time);
   EXPECT_EQ(Costs::Duration(900), cost.execution_time);
+  EXPECT_EQ(1, cost.num_ops_total);
   EXPECT_FALSE(cost.inaccurate);
+  EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
+}
+
+TEST_F(OpLevelCostEstimatorTest, CastExecutionTime) {
+  auto cost = PredictCosts(DescribeUnaryOp("Cast", 1000));
+  EXPECT_EQ(Costs::Duration(800), cost.memory_time);
+  EXPECT_EQ(Costs::Duration(100), cost.compute_time);
+  EXPECT_EQ(Costs::Duration(900), cost.execution_time);
+  EXPECT_EQ(1, cost.num_ops_total);
+  EXPECT_FALSE(cost.inaccurate);
+  EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
 }
 
 TEST_F(OpLevelCostEstimatorTest, UnknownOrPartialShape) {
-  EXPECT_FALSE(PredictCosts(DescribeMatMul(2, 4, 7, 7)).inaccurate);
-  EXPECT_TRUE(PredictCosts(DescribeMatMul(-1, 4, 7, 7)).inaccurate);
-  EXPECT_TRUE(PredictCosts(DescribeMatMul(2, 4, -1, 7)).inaccurate);
-
-  EXPECT_FALSE(PredictCosts(DescribeConvolution(16, 19, 19, 48, 48, 5, 5, 256))
-                   .inaccurate);
-  EXPECT_TRUE(PredictCosts(DescribeConvolution(16, -1, 19, 48, 48, 5, 5, 256))
-                  .inaccurate);
+  {
+    auto cost = PredictCosts(DescribeMatMul(2, 4, 7, 7));
+    EXPECT_EQ(1, cost.num_ops_total);
+    EXPECT_FALSE(cost.inaccurate);
+    EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
+  }
+  {
+    auto cost = PredictCosts(DescribeMatMul(-1, 4, 7, 7));
+    EXPECT_EQ(1, cost.num_ops_total);
+    EXPECT_TRUE(cost.inaccurate);
+    EXPECT_EQ(1, cost.num_ops_with_unknown_shapes);
+  }
+  {
+    auto cost = PredictCosts(DescribeMatMul(2, 4, -1, 7));
+    EXPECT_EQ(1, cost.num_ops_total);
+    EXPECT_TRUE(cost.inaccurate);
+    EXPECT_EQ(1, cost.num_ops_with_unknown_shapes);
+  }
+  {
+    auto cost =
+        PredictCosts(DescribeConvolution(16, 19, 19, 48, 48, 5, 5, 256));
+    EXPECT_EQ(1, cost.num_ops_total);
+    EXPECT_FALSE(cost.inaccurate);
+    EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
+  }
+  {
+    auto cost =
+        PredictCosts(DescribeConvolution(16, -1, 19, 48, 48, 5, 5, 256));
+    EXPECT_EQ(1, cost.num_ops_total);
+    EXPECT_TRUE(cost.inaccurate);
+    EXPECT_EQ(1, cost.num_ops_with_unknown_shapes);
+  }
 }
 
 TEST_F(OpLevelCostEstimatorTest, BatchMatMul) {
-  EXPECT_TRUE(PredictCosts(DescribeBatchMatMul({}, {})).inaccurate);
-  EXPECT_TRUE(PredictCosts(DescribeBatchMatMul({2, 4}, {})).inaccurate);
-  EXPECT_FALSE(PredictCosts(DescribeBatchMatMul({2, 4}, {4, 2})).inaccurate);
-  EXPECT_FALSE(
-      PredictCosts(DescribeBatchMatMul({1, 2, 4}, {1, 4, 2})).inaccurate);
-  EXPECT_FALSE(
-      PredictCosts(DescribeBatchMatMul({2, 4}, {1, 3, 4, 2})).inaccurate);
+  {
+    auto cost = PredictCosts(DescribeBatchMatMul({}, {}));
+    EXPECT_EQ(1, cost.num_ops_total);
+    EXPECT_TRUE(cost.inaccurate);
+    EXPECT_EQ(1, cost.num_ops_with_unknown_shapes);
+  }
+  {
+    auto cost = PredictCosts(DescribeBatchMatMul({2, 4}, {}));
+    EXPECT_EQ(1, cost.num_ops_total);
+    EXPECT_TRUE(cost.inaccurate);
+    EXPECT_EQ(1, cost.num_ops_with_unknown_shapes);
+  }
+  {
+    auto cost = PredictCosts(DescribeBatchMatMul({2, 4}, {4, 2}));
+    EXPECT_EQ(1, cost.num_ops_total);
+    EXPECT_FALSE(cost.inaccurate);
+    EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
+  }
+  {
+    auto cost = PredictCosts(DescribeBatchMatMul({1, 2, 4}, {1, 4, 2}));
+    EXPECT_EQ(1, cost.num_ops_total);
+    EXPECT_FALSE(cost.inaccurate);
+    EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
+  }
+  {
+    auto cost = PredictCosts(DescribeBatchMatMul({2, 4}, {1, 3, 4, 2}));
+    EXPECT_EQ(1, cost.num_ops_total);
+    EXPECT_FALSE(cost.inaccurate);
+    EXPECT_EQ(0, cost.num_ops_with_unknown_shapes);
+  }
   bool matmul_inaccurate = false;
   bool batch_matmul_inaccurate = false;
   EXPECT_EQ(
@@ -746,7 +886,7 @@ TEST_F(OpLevelCostEstimatorTest, GetTensorShapeProtoFromTensorProto) {
   EXPECT_FALSE(
       GetTensorShapeProtoFromTensorProto(tensor_proto, &tensor_shape_proto));
 
-  // Check GetTensorShapeProtoFromTensorProto() resturns correct values.
+  // Check GetTensorShapeProtoFromTensorProto() returns correct values.
   {
     std::vector<int64> shape_expected = {10, 20, 30, 40};
     GetTensorProto(DT_INT32, {4}, shape_expected,
@@ -813,7 +953,9 @@ TEST_F(OpLevelCostEstimatorTest, PredictMaxPool) {
     EXPECT_EQ(Costs::Duration(1075200), costs.execution_time);
     EXPECT_EQ(Costs::Duration(307200), costs.compute_time);
     EXPECT_EQ(Costs::Duration(768000), costs.memory_time);
+    EXPECT_EQ(1, costs.num_ops_total);
     EXPECT_FALSE(costs.inaccurate);
+    EXPECT_EQ(0, costs.num_ops_with_unknown_shapes);
   }
   {
     // 1x1 window with 2x2 stride: used for shortcut in resnet-50.
@@ -821,7 +963,9 @@ TEST_F(OpLevelCostEstimatorTest, PredictMaxPool) {
     EXPECT_EQ(Costs::Duration(499200), costs.execution_time);
     EXPECT_EQ(Costs::Duration(38400), costs.compute_time);
     EXPECT_EQ(Costs::Duration(460800), costs.memory_time);
+    EXPECT_EQ(1, costs.num_ops_total);
     EXPECT_FALSE(costs.inaccurate);
+    EXPECT_EQ(0, costs.num_ops_with_unknown_shapes);
   }
   {
     // 2x2 window with 3x3 stride.
@@ -829,7 +973,9 @@ TEST_F(OpLevelCostEstimatorTest, PredictMaxPool) {
     EXPECT_EQ(Costs::Duration(561792), costs.execution_time);
     EXPECT_EQ(Costs::Duration(56448), costs.compute_time);
     EXPECT_EQ(Costs::Duration(505344), costs.memory_time);
+    EXPECT_EQ(1, costs.num_ops_total);
     EXPECT_FALSE(costs.inaccurate);
+    EXPECT_EQ(0, costs.num_ops_with_unknown_shapes);
   }
 }
 
@@ -844,12 +990,14 @@ TEST_F(OpLevelCostEstimatorTest, PredictMaxPoolGrad) {
   };
 
   {
-    // Typical 3xz3 window with 2x2 stride.
+    // Typical 3x3 window with 2x2 stride.
     auto costs = predict_max_pool_grad(10, 20, 384, 3, 2, "SAME");
     EXPECT_EQ(Costs::Duration(1996800), costs.execution_time);
     EXPECT_EQ(Costs::Duration(614400), costs.compute_time);
     EXPECT_EQ(Costs::Duration(1382400), costs.memory_time);
+    EXPECT_EQ(1, costs.num_ops_total);
     EXPECT_FALSE(costs.inaccurate);
+    EXPECT_EQ(0, costs.num_ops_with_unknown_shapes);
   }
   {
     // 1x1 window with 2x2 stride: used for shortcut in resnet-50.
@@ -857,7 +1005,9 @@ TEST_F(OpLevelCostEstimatorTest, PredictMaxPoolGrad) {
     EXPECT_EQ(Costs::Duration(1536000), costs.execution_time);
     EXPECT_EQ(Costs::Duration(153600), costs.compute_time);
     EXPECT_EQ(Costs::Duration(1382400), costs.memory_time);
+    EXPECT_EQ(1, costs.num_ops_total);
     EXPECT_FALSE(costs.inaccurate);
+    EXPECT_EQ(0, costs.num_ops_with_unknown_shapes);
   }
   {
     // 2x2 window with 3x3 stride.
@@ -865,7 +1015,9 @@ TEST_F(OpLevelCostEstimatorTest, PredictMaxPoolGrad) {
     EXPECT_EQ(Costs::Duration(1514112), costs.execution_time);
     EXPECT_EQ(Costs::Duration(210048), costs.compute_time);
     EXPECT_EQ(Costs::Duration(1304064), costs.memory_time);
+    EXPECT_EQ(1, costs.num_ops_total);
     EXPECT_FALSE(costs.inaccurate);
+    EXPECT_EQ(0, costs.num_ops_with_unknown_shapes);
   }
 }
 
@@ -879,12 +1031,14 @@ TEST_F(OpLevelCostEstimatorTest, PredictAvgPool) {
   };
 
   {
-    // Typical 3xz3 window with 2x2 stride.
+    // Typical 3x3 window with 2x2 stride.
     auto costs = predict_avg_pool(10, 20, 384, 3, 2, "SAME");
     EXPECT_EQ(Costs::Duration(1113600), costs.execution_time);
     EXPECT_EQ(Costs::Duration(345600), costs.compute_time);
     EXPECT_EQ(Costs::Duration(768000), costs.memory_time);
+    EXPECT_EQ(1, costs.num_ops_total);
     EXPECT_FALSE(costs.inaccurate);
+    EXPECT_EQ(0, costs.num_ops_with_unknown_shapes);
   }
   {
     // 1x1 window with 2x2 stride: used for shortcut in resnet-50.
@@ -892,7 +1046,9 @@ TEST_F(OpLevelCostEstimatorTest, PredictAvgPool) {
     EXPECT_EQ(Costs::Duration(499200), costs.execution_time);
     EXPECT_EQ(Costs::Duration(38400), costs.compute_time);
     EXPECT_EQ(Costs::Duration(460800), costs.memory_time);
+    EXPECT_EQ(1, costs.num_ops_total);
     EXPECT_FALSE(costs.inaccurate);
+    EXPECT_EQ(0, costs.num_ops_with_unknown_shapes);
   }
   {
     // 2x2 window with 3x3 stride.
@@ -900,7 +1056,9 @@ TEST_F(OpLevelCostEstimatorTest, PredictAvgPool) {
     EXPECT_EQ(Costs::Duration(580608), costs.execution_time);
     EXPECT_EQ(Costs::Duration(75264), costs.compute_time);
     EXPECT_EQ(Costs::Duration(505344), costs.memory_time);
+    EXPECT_EQ(1, costs.num_ops_total);
     EXPECT_FALSE(costs.inaccurate);
+    EXPECT_EQ(0, costs.num_ops_with_unknown_shapes);
   }
 }
 
@@ -920,7 +1078,9 @@ TEST_F(OpLevelCostEstimatorTest, PredictAvgPoolGrad) {
     EXPECT_EQ(Costs::Duration(1305602), costs.execution_time);
     EXPECT_EQ(Costs::Duration(537600), costs.compute_time);
     EXPECT_EQ(Costs::Duration(768002), costs.memory_time);
+    EXPECT_EQ(1, costs.num_ops_total);
     EXPECT_FALSE(costs.inaccurate);
+    EXPECT_EQ(0, costs.num_ops_with_unknown_shapes);
   }
   {
     // 1x1 window with 2x2 stride: used for shortcut in resnet-50.
@@ -928,7 +1088,9 @@ TEST_F(OpLevelCostEstimatorTest, PredictAvgPoolGrad) {
     EXPECT_EQ(Costs::Duration(960002), costs.execution_time);
     EXPECT_EQ(Costs::Duration(192000), costs.compute_time);
     EXPECT_EQ(Costs::Duration(768002), costs.memory_time);
+    EXPECT_EQ(1, costs.num_ops_total);
     EXPECT_FALSE(costs.inaccurate);
+    EXPECT_EQ(0, costs.num_ops_with_unknown_shapes);
   }
   {
     // 2x2 window with 3x3 stride.
@@ -936,7 +1098,9 @@ TEST_F(OpLevelCostEstimatorTest, PredictAvgPoolGrad) {
     EXPECT_EQ(Costs::Duration(862082), costs.execution_time);
     EXPECT_EQ(Costs::Duration(172416), costs.compute_time);
     EXPECT_EQ(Costs::Duration(689666), costs.memory_time);
+    EXPECT_EQ(1, costs.num_ops_total);
     EXPECT_FALSE(costs.inaccurate);
+    EXPECT_EQ(0, costs.num_ops_with_unknown_shapes);
   }
 }
 
@@ -953,7 +1117,9 @@ TEST_F(OpLevelCostEstimatorTest, PredictFusedBatchNorm) {
     EXPECT_EQ(Costs::Duration(614737), costs.execution_time);
     EXPECT_EQ(Costs::Duration(153706), costs.compute_time);
     EXPECT_EQ(Costs::Duration(461031), costs.memory_time);
+    EXPECT_EQ(1, costs.num_ops_total);
     EXPECT_FALSE(costs.inaccurate);
+    EXPECT_EQ(0, costs.num_ops_with_unknown_shapes);
   }
 
   {
@@ -961,7 +1127,9 @@ TEST_F(OpLevelCostEstimatorTest, PredictFusedBatchNorm) {
     EXPECT_EQ(Costs::Duration(204913), costs.execution_time);
     EXPECT_EQ(Costs::Duration(51236), costs.compute_time);
     EXPECT_EQ(Costs::Duration(153677), costs.memory_time);
+    EXPECT_EQ(1, costs.num_ops_total);
     EXPECT_FALSE(costs.inaccurate);
+    EXPECT_EQ(0, costs.num_ops_with_unknown_shapes);
   }
 
   {
@@ -969,7 +1137,9 @@ TEST_F(OpLevelCostEstimatorTest, PredictFusedBatchNorm) {
     EXPECT_EQ(Costs::Duration(384154), costs.execution_time);
     EXPECT_EQ(Costs::Duration(76800), costs.compute_time);
     EXPECT_EQ(Costs::Duration(307354), costs.memory_time);
+    EXPECT_EQ(1, costs.num_ops_total);
     EXPECT_FALSE(costs.inaccurate);
+    EXPECT_EQ(0, costs.num_ops_with_unknown_shapes);
   }
 
   {
@@ -978,6 +1148,8 @@ TEST_F(OpLevelCostEstimatorTest, PredictFusedBatchNorm) {
     EXPECT_EQ(Costs::Duration(25600), costs.compute_time);
     EXPECT_EQ(Costs::Duration(102452), costs.memory_time);
     EXPECT_FALSE(costs.inaccurate);
+    EXPECT_EQ(1, costs.num_ops_total);
+    EXPECT_EQ(0, costs.num_ops_with_unknown_shapes);
   }
 }
 
@@ -994,7 +1166,9 @@ TEST_F(OpLevelCostEstimatorTest, PredictFusedBatchNormGrad) {
     EXPECT_EQ(Costs::Duration(1037050), costs.execution_time);
     EXPECT_EQ(Costs::Duration(422496), costs.compute_time);
     EXPECT_EQ(Costs::Duration(614554), costs.memory_time);
+    EXPECT_EQ(1, costs.num_ops_total);
     EXPECT_FALSE(costs.inaccurate);
+    EXPECT_EQ(0, costs.num_ops_with_unknown_shapes);
   }
 
   {
@@ -1002,8 +1176,136 @@ TEST_F(OpLevelCostEstimatorTest, PredictFusedBatchNormGrad) {
     EXPECT_EQ(Costs::Duration(6503809), costs.execution_time);
     EXPECT_EQ(Costs::Duration(2649677), costs.compute_time);
     EXPECT_EQ(Costs::Duration(3854132), costs.memory_time);
+    EXPECT_EQ(1, costs.num_ops_total);
     EXPECT_FALSE(costs.inaccurate);
+    EXPECT_EQ(0, costs.num_ops_with_unknown_shapes);
   }
+}
+
+TEST_F(OpLevelCostEstimatorTest, MaybeGetMinimumShape) {
+  {
+    TensorShapeProto x;
+    x.set_unknown_rank(true);
+    bool unknown_shapes = false;
+    TensorShapeProto y = MaybeGetMinimumShape(x, 4, &unknown_shapes);
+    EXPECT_TRUE(unknown_shapes);
+    ExpectTensorShape({1, 1, 1, 1}, y);
+  }
+
+  {
+    TensorShapeProto x;
+    x.set_unknown_rank(false);
+    bool unknown_shapes = false;
+    TensorShapeProto y = MaybeGetMinimumShape(x, 1, &unknown_shapes);
+    EXPECT_FALSE(unknown_shapes);
+    ExpectTensorShape({1}, y);
+  }
+
+  {
+    TensorShapeProto x;
+    x.set_unknown_rank(false);
+    bool unknown_shapes = false;
+    TensorShapeProto y = MaybeGetMinimumShape(x, 2, &unknown_shapes);
+    EXPECT_FALSE(unknown_shapes);
+    ExpectTensorShape({1, 1}, y);
+  }
+
+  {
+    TensorShapeProto x;
+    x.set_unknown_rank(false);
+    x.add_dim()->set_size(10);
+    x.add_dim()->set_size(20);
+    bool unknown_shapes = false;
+    TensorShapeProto y = MaybeGetMinimumShape(x, 2, &unknown_shapes);
+    EXPECT_FALSE(unknown_shapes);
+    ExpectTensorShape({10, 20}, y);
+
+    unknown_shapes = false;
+    TensorShapeProto z = MaybeGetMinimumShape(x, 4, &unknown_shapes);
+    EXPECT_TRUE(unknown_shapes);
+    EXPECT_EQ(4, z.dim_size());
+    ExpectTensorShape({10, 20, 1, 1}, z);
+  }
+
+  {
+    TensorShapeProto x;
+    x.set_unknown_rank(false);
+    x.add_dim()->set_size(10);
+    x.add_dim()->set_size(20);
+    x.add_dim()->set_size(-1);
+    x.add_dim()->set_size(20);
+    bool unknown_shapes = false;
+    TensorShapeProto y = MaybeGetMinimumShape(x, 4, &unknown_shapes);
+    EXPECT_TRUE(unknown_shapes);
+    ExpectTensorShape({10, 20, 1, 20}, y);
+  }
+
+  {
+    TensorShapeProto x;
+    x.set_unknown_rank(false);
+    x.add_dim()->set_size(10);
+    x.add_dim()->set_size(20);
+    x.add_dim()->set_size(30);
+    x.add_dim()->set_size(20);
+    bool unknown_shapes = false;
+    TensorShapeProto y = MaybeGetMinimumShape(x, 2, &unknown_shapes);
+    EXPECT_TRUE(unknown_shapes);
+    ExpectTensorShape({10, 20}, y);
+  }
+}
+
+TEST_F(OpLevelCostEstimatorTest, IntermediateRdWrBandwidth) {
+  TestOpLevelCostEstimator estimator;
+
+  // Compute limited.
+  estimator.SetDeviceInfo(DeviceInfo(/*gigaops=*/1,
+                                     /*gb_per_sec=*/1));
+  estimator.SetComputeMemoryOverlap(true);
+  auto cost = estimator.PredictCosts(
+      DescribeConvolution(16, 19, 19, 48, 48, 5, 5, 256));
+  EXPECT_EQ(Costs::Duration(3548774400), cost.execution_time);
+  EXPECT_EQ(cost.execution_time, cost.compute_time);
+
+  estimator.SetComputeMemoryOverlap(false);
+  cost = estimator.PredictCosts(
+      DescribeConvolution(16, 19, 19, 48, 48, 5, 5, 256));
+  EXPECT_EQ(Costs::Duration(3551112192), cost.execution_time);
+  EXPECT_EQ(cost.execution_time, cost.compute_time + cost.memory_time +
+                                     cost.intermediate_memory_time);
+
+  // Memory limited.
+  estimator.SetDeviceInfo(DeviceInfo(/*gigaops=*/99999,
+                                     /*gb_per_sec=*/1));
+  estimator.SetComputeMemoryOverlap(true);
+  cost = estimator.PredictCosts(
+      DescribeConvolution(16, 19, 19, 48, 48, 5, 5, 256));
+  EXPECT_EQ(Costs::Duration(2337792), cost.execution_time);
+  EXPECT_EQ(cost.execution_time, cost.memory_time);
+
+  estimator.SetComputeMemoryOverlap(false);
+  cost = estimator.PredictCosts(
+      DescribeConvolution(16, 19, 19, 48, 48, 5, 5, 256));
+  EXPECT_EQ(Costs::Duration(2373281), cost.execution_time);
+  EXPECT_EQ(cost.execution_time, cost.compute_time + cost.memory_time +
+                                     cost.intermediate_memory_time);
+
+  // Intermediate memory bandwidth limited.
+  estimator.SetDeviceInfo(DeviceInfo(/*gigaops=*/99999,
+                                     /*gb_per_sec=*/9999,
+                                     /*intermediate_read_gb_per_sec=*/1,
+                                     /*intermediate_write_gb_per_sec=*/1));
+  estimator.SetComputeMemoryOverlap(true);
+  cost = estimator.PredictCosts(
+      DescribeConvolution(16, 19, 19, 48, 48, 5, 5, 256));
+  EXPECT_EQ(Costs::Duration(2337792), cost.execution_time);
+  EXPECT_EQ(cost.execution_time, cost.intermediate_memory_time);
+
+  estimator.SetComputeMemoryOverlap(false);
+  cost = estimator.PredictCosts(
+      DescribeConvolution(16, 19, 19, 48, 48, 5, 5, 256));
+  EXPECT_EQ(Costs::Duration(2373515), cost.execution_time);
+  EXPECT_EQ(cost.execution_time, cost.compute_time + cost.memory_time +
+                                     cost.intermediate_memory_time);
 }
 }  // end namespace grappler
 }  // end namespace tensorflow

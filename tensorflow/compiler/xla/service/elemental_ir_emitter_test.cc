@@ -24,12 +24,11 @@ limitations under the License.
 namespace xla {
 namespace {
 
-using tensorflow::gtl::nullopt;
+using absl::nullopt;
 
 class ElementalIrEmitterExecutionTest : public HloTestBase {
  protected:
-  void RunTest(const string& hlo_text,
-               tensorflow::gtl::ArraySlice<Literal*> args) {
+  void RunTest(const string& hlo_text, absl::Span<Literal* const> args) {
     HloModuleConfig config;
     config.set_debug_options(GetDebugOptionsForTest());
     TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
@@ -57,9 +56,34 @@ ENTRY main {
 }
 )";
 
-  std::unique_ptr<Literal> lhs = LiteralUtil::CreateR3<int32>({{{1}, {2}}});
-  std::unique_ptr<Literal> rhs = LiteralUtil::CreateR3<int32>({{{3}, {4}}});
-  RunTest(hlo_text, {lhs.get(), rhs.get()});
+  Literal lhs = LiteralUtil::CreateR3<int32>({{{1}, {2}}});
+  Literal rhs = LiteralUtil::CreateR3<int32>({{{3}, {4}}});
+  RunTest(hlo_text, {&lhs, &rhs});
+}
+
+XLA_TEST_F(ElementalIrEmitterExecutionTest, BatchDot) {
+  const char* hlo_text = R"(
+HloModule BatchDot
+
+fused_computation.1 {
+  param_0 = f64[1,1,8]{2,1,0} parameter(0)
+  r.1 = f64[2,4]{1,0} reshape(param_0)
+  param_1 = f64[1,2,2,2,1]{4,3,2,1,0} parameter(1)
+  r.2 = f64[2,4,1]{2,1,0} reshape(param_1)
+  ROOT dot = f64[2,1]{1,0} dot(r.1, r.2), lhs_batch_dims={0},
+                                          lhs_contracting_dims={1},
+                                          rhs_batch_dims={0},
+                                          rhs_contracting_dims={1}
+}
+
+ENTRY resampler_Resampler.49 {
+  p0 = f64[1,1,8]{2,1,0} parameter(0)
+  p1 = f64[1,2,2,2,1]{4,3,2,1,0} parameter(1)
+  ROOT f = f64[2,1]{1,0} fusion(p0, p1), kind=kLoop, calls=fused_computation.1
+}
+)";
+
+  EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{4e-3, 4e-3}));
 }
 }  // namespace
 }  // namespace xla

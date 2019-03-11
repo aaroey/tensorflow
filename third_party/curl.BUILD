@@ -236,14 +236,13 @@ cc_library(
         "lib/wildcard.h",
         "lib/x509asn1.h",
     ] + select({
-        "@org_tensorflow//tensorflow:darwin": [
+        "@org_tensorflow//tensorflow:macos": [
             "lib/vtls/darwinssl.c",
         ],
         "@org_tensorflow//tensorflow:ios": [
             "lib/vtls/darwinssl.c",
         ],
         "@org_tensorflow//tensorflow:windows": CURL_WIN_SRCS,
-        "@org_tensorflow//tensorflow:windows_msvc": CURL_WIN_SRCS,
         "//conditions:default": [
             "lib/vtls/openssl.c",
         ],
@@ -260,7 +259,6 @@ cc_library(
     ],
     copts = select({
         "@org_tensorflow//tensorflow:windows": CURL_WIN_COPTS,
-        "@org_tensorflow//tensorflow:windows_msvc": CURL_WIN_COPTS,
         "//conditions:default": [
             "-Iexternal/curl/lib",
             "-D_GNU_SOURCE",
@@ -273,14 +271,10 @@ cc_library(
             "-Wno-string-plus-int",
         ],
     }) + select({
-        "@org_tensorflow//tensorflow:darwin": [
+        "@org_tensorflow//tensorflow:macos": [
             "-fno-constant-cfstrings",
         ],
         "@org_tensorflow//tensorflow:windows": [
-            # See curl.h for discussion of write size and Windows
-            "/DCURL_MAX_WRITE_SIZE=16384",
-        ],
-        "@org_tensorflow//tensorflow:windows_msvc": [
             # See curl.h for discussion of write size and Windows
             "/DCURL_MAX_WRITE_SIZE=16384",
         ],
@@ -294,7 +288,7 @@ cc_library(
         "@org_tensorflow//tensorflow:android": [
             "-pie",
         ],
-        "@org_tensorflow//tensorflow:darwin": [
+        "@org_tensorflow//tensorflow:macos": [
             "-Wl,-framework",
             "-Wl,CoreFoundation",
             "-Wl,-framework",
@@ -302,12 +296,6 @@ cc_library(
         ],
         "@org_tensorflow//tensorflow:ios": [],
         "@org_tensorflow//tensorflow:windows": [
-            "-DEFAULTLIB:ws2_32.lib",
-            "-DEFAULTLIB:advapi32.lib",
-            "-DEFAULTLIB:crypt32.lib",
-            "-DEFAULTLIB:Normaliz.lib",
-        ],
-        "@org_tensorflow//tensorflow:windows_msvc": [
             "-DEFAULTLIB:ws2_32.lib",
             "-DEFAULTLIB:advapi32.lib",
             "-DEFAULTLIB:crypt32.lib",
@@ -323,7 +311,6 @@ cc_library(
     ] + select({
         "@org_tensorflow//tensorflow:ios": [],
         "@org_tensorflow//tensorflow:windows": [],
-        "@org_tensorflow//tensorflow:windows_msvc": [],
         "//conditions:default": [
             "@boringssl//:ssl",
         ],
@@ -426,7 +413,6 @@ cc_binary(
     ],
     copts = select({
         "@org_tensorflow//tensorflow:windows": CURL_BIN_WIN_COPTS,
-        "@org_tensorflow//tensorflow:windows_msvc": CURL_BIN_WIN_COPTS,
         "//conditions:default": [
             "-Iexternal/curl/lib",
             "-D_GNU_SOURCE",

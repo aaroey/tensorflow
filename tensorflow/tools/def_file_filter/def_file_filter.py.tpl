@@ -48,6 +48,7 @@ EXCLUDE_RE = re.compile(r"RTTI|deleting destructor|::internal::")
 INCLUDEPRE_RE = re.compile(r"google::protobuf::internal::ExplicitlyConstructed|"
                            r"google::protobuf::internal::ArenaImpl::AllocateAligned|" # for contrib/data/_prefetching_ops
                            r"google::protobuf::internal::ArenaImpl::AddCleanup|" # for contrib/data/_prefetching_ops
+                           r"google::protobuf::internal::LogMessage|" # for contrib/data/_prefetching_ops
                            r"google::protobuf::Arena::OnArenaAllocation|" # for contrib/data/_prefetching_ops
                            r"tensorflow::internal::LogMessage|"
                            r"tensorflow::internal::LogString|"
@@ -88,7 +89,7 @@ def get_args():
                       help="paths to input def file",
                       required=True)
   parser.add_argument("--output", help="output deffile", required=True)
-  parser.add_argument("--target", help="name of the target", required=True)
+  parser.add_argument("--target", help="name of the target")
   args = parser.parse_args()
   return args
 
@@ -118,7 +119,8 @@ def main():
     taken = set()
 
     # Header for the def file.
-    def_fp.write("LIBRARY " + args.target + "\n")
+    if args.target:
+      def_fp.write("LIBRARY " + args.target + "\n")
     def_fp.write("EXPORTS\n")
     def_fp.write("\t ??1OpDef@tensorflow@@UEAA@XZ\n")
 
