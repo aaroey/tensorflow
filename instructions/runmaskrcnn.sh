@@ -3,7 +3,8 @@ set -x
 
 export LD_LIBRARY_PATH=$HOME/Downloads/TensorRT-5.1.2.1-cuda-10.0/lib:/usr/local/cuda/extras/CUPTI/lib64:/usr/local/cuda/lib64
 
-vmodule_config='convert_nodes=1,trt_engine_op=1,segment=1,trt_logger=1'
+# vmodule_config='convert_nodes=1,trt_engine_op=1,segment=1,trt_logger=1'
+vmodule_config='convert_nodes=1,segment=1,trt_logger=1'
 trt_saved_model_dir=/tmp/maskrcnn-trt
 
 if [[ "$1" == 'py' ]]; then
@@ -21,7 +22,7 @@ else
     TF_CPP_MIN_VLOG_LEVEL=0                                           \
                                                                       \
     num_threads=1                                                     \
-    num_requests=100                                                  \
+    num_requests=200                                                  \
     model_dir=$trt_saved_model_dir                                    \
     xprof_output_path=$trt_saved_model_dir/gpuprof                    \
     xprof_num_requests=3                                              \
