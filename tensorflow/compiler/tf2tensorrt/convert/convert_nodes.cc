@@ -314,31 +314,31 @@ Status Converter::GetTrtBroadcastShape(
   }
 
   const int max_nb_dims = nvinfer1::Dims::MAX_DIMS + 1;
-  auto compute_output_dims =
-      [](const TRT_TensorOrWeights& input, int broadcast_num_dims,
-         int* output_dims_array, nvinfer1::Dims* output_dims) {
-        const nvinfer1::Dims input_dims = input.GetTrtDims();
-        std::fill(output_dims_array, output_dims_array + max_nb_dims, 1);
-        std::copy(input_dims.d, input_dims.d + input_dims.nbDims,
-                  output_dims_array + broadcast_num_dims - input_dims.nbDims);
-        if (input.is_tensor()) {
-          const int true_input_dims = input_dims.nbDims + 1;
-          if (true_input_dims < broadcast_num_dims) {
-            return errors::InvalidArgument(
-                "Broadcasting beyond batch dimension is not supported ",
-                "(tensor #dims ", true_input_dims, " vs broadcast #dims ",
-                broadcast_num_dims, ")");
-          }
-          // Set the batch dimension to -1, since batch size is not supposed to
-          // be broadcasted.
-          output_dims_array[0] = -1;
-        }
-        // Copy to output dimensions (stripping the batch dimension).
-        output_dims->nbDims = broadcast_num_dims - 1;
-        std::copy(output_dims_array + 1, output_dims_array + broadcast_num_dims,
-                  output_dims->d);
-        return Status::OK();
-      };
+  auto compute_output_dims = [](const TRT_TensorOrWeights& input,
+                                int broadcast_num_dims, int* output_dims_array,
+                                nvinfer1::Dims* output_dims) {
+    const nvinfer1::Dims input_dims = input.GetTrtDims();
+    std::fill(output_dims_array, output_dims_array + max_nb_dims, 1);
+    std::copy(input_dims.d, input_dims.d + input_dims.nbDims,
+              output_dims_array + broadcast_num_dims - input_dims.nbDims);
+    if (input.is_tensor()) {
+      const int true_input_dims = input_dims.nbDims + 1;
+      if (true_input_dims < broadcast_num_dims) {
+        return errors::InvalidArgument(
+            "Broadcasting beyond batch dimension is not supported ",
+            "(tensor #dims ", true_input_dims, " vs broadcast #dims ",
+            broadcast_num_dims, ")");
+      }
+      // Set the batch dimension to -1, since batch size is not supposed to
+      // be broadcasted.
+      output_dims_array[0] = -1;
+    }
+    // Copy to output dimensions (stripping the batch dimension).
+    output_dims->nbDims = broadcast_num_dims - 1;
+    std::copy(output_dims_array + 1, output_dims_array + broadcast_num_dims,
+              output_dims->d);
+    return Status::OK();
+  };
 
   // Compute the output dimensions.
   const int broadcast_num_dims =
@@ -2288,8 +2288,8 @@ Status ConvertSqueeze(OpConverterParams* params) {
     // Make sure target dimension is size 1.
     if (input_dims[axis] != 1) {
       return errors::InvalidArgument(
-          "Cannot squeeze a dimension which isn't size 1, at ",
-          node_def.name());
+          "Cannot squeeze ", axis, "th dimension ", input_dims[axis],
+          " which isn't size 1, at ", node_def.name());
     }
     // Mark dim for removal by setting to 0.
     input_dims[axis] = 0;
@@ -2341,8 +2341,11 @@ Status ConvertStridedSliceHelper(OpConverterParams* params,
   }
 // TRT 5.1 adds a slice layer. For older versions, we attempt to use the
 // padding layer with negative padding.
-// #if NV_TENSORRT_MAJOR > 5 || (NV_TENSORRT_MAJOR == 5 && NV_TENSORRT_MINOR >= 1)
-#if 0
+#if (NV_TENSORRT_MAJOR > 5 ||                               \
+     (NV_TENSORRT_MAJOR == 5 && NV_TENSORRT_MINOR >= 1)) && \
+    0
+  // TODO(laigd): TRT 5.1 RC has a bug when ISliceLayer is used along with
+  // IConcatenationLayer, so disable ISliceLayer for now until it's fixed.
   // Use ISliceLayer.
   nvinfer1::Dims begin_dims, size_dims, stride_dims;
   TF_RETURN_IF_ERROR(TensorShapeArrayToTrtDims(begin, &begin_dims,
@@ -3755,14 +3758,13 @@ Status ConvertGather(OpConverterParams* params) {
   // (params.nbDims + 1) + (indices.nbDims + 1) - 1,
   // where "+ 1" adds the batch dim.
   const int tf_gather_output_rank = params_tensor.GetTrtDims().nbDims +
-                                 indices_tensor.GetTrtDims().nbDims + 1;
+                                    indices_tensor.GetTrtDims().nbDims + 1;
   if (tf_gather_output_rank > nvinfer1::Dims::MAX_DIMS + 1) {
     return errors::InvalidArgument(
         "Result of gather has dimension greater than ",
         nvinfer1::Dims::MAX_DIMS + 1);
   }
   if (params->validation_only) return Status::OK();
-
 
   // Note on how IGatherLayer works: if both the data and indices tensors have
   // a batch size dimension of size N, it performs:
@@ -3782,12 +3784,12 @@ Status ConvertGather(OpConverterParams* params) {
   if (trt_gather_output_dims.nbDims != tf_gather_output_rank - 2) {
     return errors::Internal(
         "Get unexpected output dimensions of IGatherLayer. Expect nbDims: ",
-        tf_gather_output_rank - 2, ", actual nbDims: ",
-        trt_gather_output_dims.nbDims);
+        tf_gather_output_rank - 2,
+        ", actual nbDims: ", trt_gather_output_dims.nbDims);
   }
   // Reshape the output so after adding the implicit batch dim it'll match the
   // output shape of TF GatherV2.
-  for (int i = nvinfer1::Dims::MAX_DIMS - 1; i > trt_axis; --i) {
+  for (int i = trt_gather_output_dims.nbDims; i > trt_axis; --i) {
     trt_gather_output_dims.d[i] = trt_gather_output_dims.d[i - 1];
   }
   trt_gather_output_dims.d[trt_axis] = 1;
@@ -4369,7 +4371,7 @@ Status ConvertSegmentToGraphDef(
     const Graph* graph, const grappler::GraphProperties& graph_properties,
     const std::vector<const Node*>& subgraph_nodes,  // In topological order
     std::vector<EngineConnection>* connections, GraphDef* segment_def,
-    string* engine_name) {
+    string* scope_name) {
   std::set<string> marker_nodes;
   // Update connection shapes/data types and add corresponding input/output
   // nodes in the segment graphdef.
@@ -4502,9 +4504,7 @@ Status ConvertSegmentToGraphDef(
       snode->mutable_input()->RemoveLast();
     }
   }
-  *engine_name = StrCat(local_scope, *engine_name);
-  VLOG(1) << "Converted TensorRT candidate segment '" << *engine_name
-          << "' to a GraphDef";
+  *scope_name = local_scope;
   return Status::OK();
 }
 

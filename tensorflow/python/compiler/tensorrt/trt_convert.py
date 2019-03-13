@@ -644,8 +644,8 @@ class TrtGraphConverter(GraphConverter):
     # Check compatibility of TensorRT version.
     compiled_version = get_linked_tensorrt_version()
     loaded_version = get_loaded_tensorrt_version()
-    print('------------------> linked_tensorrt_version: %s' % str(compiled_version))
-    print('------------------> loaded_tensorrt_version: %s' % str(loaded_version))
+    tf_logging.info("Linked TensorRT version: %s" % str(compiled_version))
+    tf_logging.info("Loaded TensorRT version: %s" % str(loaded_version))
     version_mismatch = False
     if loaded_version[0] < compiled_version[0]:
       tf_logging.error(
