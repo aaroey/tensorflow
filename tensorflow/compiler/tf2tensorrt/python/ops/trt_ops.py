@@ -40,7 +40,6 @@ def load_trt_ops():
 
     try:
       # pylint: disable=g-import-not-at-top,unused-variable
-      # This registers the TRT ops, it doesn't require loading TRT library.
       from tensorflow.compiler.tf2tensorrt.ops.gen_trt_ops import trt_engine_op
       # pylint: enable=g-import-not-at-top,unused-variable
     except ImportError as e:
@@ -48,8 +47,6 @@ def load_trt_ops():
             "not built with CUDA or TensorRT enabled. ****")
       raise e
 
-    # TODO(laigd): we should load TF-TRT kernels here as well after removing the
-    # swig binding.
     try:
       # pylint: disable=g-import-not-at-top
       from tensorflow.python.framework import load_library

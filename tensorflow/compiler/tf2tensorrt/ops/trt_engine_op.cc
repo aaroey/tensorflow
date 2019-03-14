@@ -24,10 +24,6 @@ limitations under the License.
 
 namespace tensorflow {
 
-namespace shape_inference {
-extern Status TRTEngineOpShapeInference(InferenceContext* c);
-}
-
 // NOTE: please try NOT to add/modify/remove attributes or inputs/outputs to the
 // list below, this will break backward compatibility!
 //
@@ -57,7 +53,6 @@ REGISTER_OP("TRTEngineOp")
     // implementation, we do require all input tensor to carry the same batch
     // size, but this could change in the future). Hence we disable shape
     // inference function as a workaround.
-    // .SetShapeFn(shape_inference::TRTEngineOpShapeInference);
     .SetShapeFn(shape_inference::UnknownShape);
 }  // namespace tensorflow
 
