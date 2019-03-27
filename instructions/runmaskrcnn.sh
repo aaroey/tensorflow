@@ -24,18 +24,11 @@ else
     num_threads=1                                                     \
     num_requests=200                                                  \
     model_dir=$trt_saved_model_dir                                    \
-    xprof_output_path=$trt_saved_model_dir/gpuprof                    \
-    xprof_num_requests=3                                              \
                                                                       \
     input_file=instructions/cat.1472x896.jpg                          \
-    output_file_for_actual_input=/tmp/dbg.jpg                         \
     resize_to_width=1472                                              \
     resize_to_height=896                                              \
                                                                       \
-    minimum_segment_size=10                                           \
-    max_batch_size=1                                                  \
-    max_workspace_size_bytes=1073741824                               \
-    precision_mode=FP16                                               \
     ${gdb} bazel-bin/instructions/profile_maskrcnn_cc                 \
 
 fi
