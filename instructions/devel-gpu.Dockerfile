@@ -189,5 +189,6 @@ RUN mkdir maskrcnn && \
     wget -O maskrcnn/BUILD ${REPRO_CODE}/BUILD && \
     bazel build -c opt --copt=-mavx --config=cuda \
         --cxxopt="-D_GLIBCXX_USE_CXX11_ABI=0" \
-        maskrcnn:profile_maskrcnn_cc
+        maskrcnn:profile_maskrcnn_cc && \
+    cp bazel-bin/maskrcnn/profile_maskrcnn_cc ./
 

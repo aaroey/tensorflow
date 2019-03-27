@@ -204,7 +204,7 @@ int main(int argc, char* argv[]) {
   tensorflow::int64 elapsed = tensorflow::ConcurrentSteps(opts);
   MYLOG << "eval on "
         << opts.num_requests << " requests with " << opts.num_threads
-        << " threads took " << e << " us, = " << e / 1000000.0
-        << " seconds. Mean latency: " << e / 1000.0 / opts.num_requests
+        << " threads took " << elapsed << " us, = " << elapsed / 1000000.0
+        << " seconds. Mean latency: " << elapsed / 1000.0 / opts.num_requests
         << " ms";
 }
