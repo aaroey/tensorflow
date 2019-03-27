@@ -59,3 +59,5 @@ run() {
 if [[ "$1" == 'rebuild' ]]; then
   build
 fi
+convert
+run
