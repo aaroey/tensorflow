@@ -26,7 +26,7 @@ TFTRT_MASKRCNN_TAG=lam8da/aaroey-tensorflow:tf-trt-maskrcnn-test-with-repro
 WORKING_DIR=/tmp/maskrcnntest
 SAVED_MODEL_DIR=/tmp/maskrcnn
 TRT_SAVED_MODEL_DIR=/tmp/maskrcnn-trt
-mkdir $WORKING_DIR
+mkdir -p $WORKING_DIR
 cd $WORKING_DIR
 
 build() {
@@ -37,7 +37,7 @@ convert() {
   curl -O $GITHUB_URL_PREFIX/convert_maskrcnn.py
   docker run --runtime=nvidia --rm -v /tmp:/tmp -it $TFTRT_MASKRCNN_TAG \
     bash -c "rm -rf $TRT_SAVED_MODEL_DIR;
-    python convert_maskrcnn.py $SAVED_MODEL_DIR $TRT_SAVED_MODEL_DIR"
+    python $WORKING_DIR/convert_maskrcnn.py $SAVED_MODEL_DIR $TRT_SAVED_MODEL_DIR"
   return
 
   docker run --runtime=nvidia --rm -v /tmp:/tmp -it $TFTRT_MASKRCNN_TAG \
