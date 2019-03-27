@@ -135,19 +135,18 @@ WORKDIR /tensorflow
 RUN git clone https://github.com/aaroey/tensorflow.git .
 RUN git checkout master
 
-# RUN tensorflow/tools/ci_build/builds/configured GPU \
-#     bazel build -c opt --copt=-mavx --config=cuda \
-#         --cxxopt="-D_GLIBCXX_USE_CXX11_ABI=0" \
-#         tensorflow/tools/pip_package:build_pip_package && \
-#     bazel-bin/tensorflow/tools/pip_package/build_pip_package /tmp/pip && \
-#     pip --no-cache-dir install --upgrade /tmp/pip/tensorflow-*.whl && \
-#     rm -rf /tmp/pip
+RUN tensorflow/tools/ci_build/builds/configured GPU \
+    bazel build -c opt --copt=-mavx --config=cuda \
+        --cxxopt="-D_GLIBCXX_USE_CXX11_ABI=0" \
+        tensorflow/tools/pip_package:build_pip_package && \
+    bazel-bin/tensorflow/tools/pip_package/build_pip_package /tmp/pip && \
+    pip --no-cache-dir install --upgrade /tmp/pip/tensorflow-*.whl && \
+    rm -rf /tmp/pip
 # Clean up pip wheel (but not Bazel cache) when done.
 # rm -rf /root/.cache
 
 ENV REPRO_CODE=https://raw.githubusercontent.com/aaroey/tensorflow/maskrcnn_trt/instructions
-RUN tensorflow/tools/ci_build/builds/configured GPU \
-    mkdir maskrcnn && \
+RUN mkdir maskrcnn && \
     wget -O maskrcnn/profile_maskrcnn.cc ${REPRO_CODE}/profile_maskrcnn.cc && \
     wget -O maskrcnn/BUILD ${REPRO_CODE}/BUILD && \
     bazel build -c opt --copt=-mavx --config=cuda \
