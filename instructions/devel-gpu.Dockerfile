@@ -12,18 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# To reproduce the TF-TRT performance on MaskRCNN model:
-#
-# $ mkdir /tmp/maskrcnn
-# $ cd /tmp/maskrcnn
-# $ curl -O https://raw.githubusercontent.com/aaroey/tensorflow/maskrcnn_trt/instructions/maskrcnn_new.py
-#
-# Then open /tmp/maskrcnn/maskrcnn_new.py and set the SAVED_MODEL_DIR (line 26) to
-# the maskrcnn SavedModel path. Then run:
-#
-# $ docker pull tensorflow/tensorflow:nightly-gpu
-# $ docker run --runtime=nvidia --rm -v /tmp:/tmp -it tensorflow/tensorflow:nightly-gpu bash -c "pip install Pillow requests; python /tmp/maskrcnn/maskrcnn_new.py"
-#
 # ==============================================================================
 # Below are old instructions to use customized TF repo (outdated):
 #
@@ -32,10 +20,6 @@
 # $ curl -O https://raw.githubusercontent.com/aaroey/tensorflow/maskrcnn_trt/instructions/maskrcnn_new.py
 # $ export TFTRT_MASKRCNN_TAG=lam8da/aaroey-tensorflow:tf-trt-maskrcnn-test
 # $ docker pull $TFTRT_MASKRCNN_TAG
-#
-# Then open /tmp/maskrcnn/maskrcnn_new.py and set the SAVED_MODEL_DIR (line 26) to
-# the maskrcnn SavedModel path. Then run:
-#
 # $ docker run --runtime=nvidia --rm -v /tmp:/tmp -it $TFTRT_MASKRCNN_TAG python /tmp/maskrcnn/maskrcnn_new.py
 #
 # (For debugging only) Notes: instead of 'docker pull', we can also build
@@ -46,20 +30,34 @@
 # $ docker build --pull -t $TFTRT_MASKRCNN_TAG -f /tmp/maskrcnn/devel-gpu.Dockerfile ./  # This will take a while
 
 ARG UBUNTU_VERSION=16.04
+ARG CUDA_MAJOR_VERSION=9
+ARG CUDA_MINOR_VERSION=0
 
-FROM nvidia/cuda:10.0-base-ubuntu${UBUNTU_VERSION} as base
+FROM nvidia/cuda:${CUDA_MAJOR_VERSION}.${CUDA_MINOR_VERSION}-base-ubuntu${UBUNTU_VERSION} as base
 
+# We need to re-declare the ARGs after a FROM instruction, see
+# https://docs.docker.com/engine/reference/builder/#understand-how-arg-and-from-interact
+ARG UBUNTU_VERSION
+ARG CUDA_MAJOR_VERSION
+ARG CUDA_MINOR_VERSION
+
+# See https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1604/x86_64/ for the available cudnn and tensorrt versions.
+ARG CUDNN_MAJOR_VERSION=7
+ARG CUDNN_VERSION_SUFFIX=5.0.56
+
+# CUDA dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+        apt-utils \
         build-essential \
-        cuda-command-line-tools-10-0 \
-        cuda-cublas-dev-10-0 \
-        cuda-cudart-dev-10-0 \
-        cuda-cufft-dev-10-0 \
-        cuda-curand-dev-10-0 \
-        cuda-cusolver-dev-10-0 \
-        cuda-cusparse-dev-10-0 \
-        libcudnn7=7.4.1.5-1+cuda10.0 \
-        libcudnn7-dev=7.4.1.5-1+cuda10.0 \
+        cuda-command-line-tools-${CUDA_MAJOR_VERSION}-${CUDA_MINOR_VERSION} \
+        cuda-cublas-dev-${CUDA_MAJOR_VERSION}-${CUDA_MINOR_VERSION} \
+        cuda-cudart-dev-${CUDA_MAJOR_VERSION}-${CUDA_MINOR_VERSION} \
+        cuda-cufft-dev-${CUDA_MAJOR_VERSION}-${CUDA_MINOR_VERSION} \
+        cuda-curand-dev-${CUDA_MAJOR_VERSION}-${CUDA_MINOR_VERSION} \
+        cuda-cusolver-dev-${CUDA_MAJOR_VERSION}-${CUDA_MINOR_VERSION} \
+        cuda-cusparse-dev-${CUDA_MAJOR_VERSION}-${CUDA_MINOR_VERSION} \
+        libcudnn7=${CUDNN_MAJOR_VERSION}.${CUDNN_VERSION_SUFFIX}-1+cuda${CUDA_MAJOR_VERSION}.${CUDA_MINOR_VERSION} \
+        libcudnn7-dev=${CUDNN_MAJOR_VERSION}.${CUDNN_VERSION_SUFFIX}-1+cuda${CUDA_MAJOR_VERSION}.${CUDA_MINOR_VERSION} \
         libcurl3-dev \
         libfreetype6-dev \
         libhdf5-serial-dev \
@@ -68,31 +66,31 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         pkg-config \
         rsync \
         software-properties-common \
-        unzip \
-        zip \
-        zlib1g-dev \
-        wget \
-        git \
+        unzip zip zlib1g-dev wget curl git tmux vim iputils-ping \
+        libcupti-dev libtool automake \
         && \
-    find /usr/local/cuda-10.0/lib64/ -type f -name 'lib*_static.a' -not -name 'libcudart_static.a' -delete && \
-    rm /usr/lib/x86_64-linux-gnu/libcudnn_static_v7.a
+    find /usr/local/cuda-${CUDA_MAJOR_VERSION}.${CUDA_MINOR_VERSION}/lib64/ -type f -name 'lib*_static.a' -not -name 'libcudart_static.a' -delete && \
+    rm /usr/lib/x86_64-linux-gnu/libcudnn_static_v${CUDNN_MAJOR_VERSION}.a
 
-RUN apt-get update && \
-        apt-get install nvinfer-runtime-trt-repo-ubuntu1604-5.0.2-ga-cuda10.0 \
-        && apt-get update \
-        && apt-get install -y --no-install-recommends libnvinfer-dev=5.0.2-1+cuda10.0 \
-        && rm -rf /var/lib/apt/lists/*
+# TensorRT will be installed in /usr/lib/x86_64-linux-gnu
+ARG TENSORRT_VERSION=5.1.2
+ENV NVIDIA_ML_REPO=https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1604/x86_64
+RUN mkdir /nvinfer && \
+    wget -O /nvinfer/libnvinfer.deb ${NVIDIA_ML_REPO}/libnvinfer5_${TENSORRT_VERSION}-1+cuda${CUDA_MAJOR_VERSION}.${CUDA_MINOR_VERSION}_amd64.deb && \
+    wget -O /nvinfer/libnvinfer-dev.deb ${NVIDIA_ML_REPO}/libnvinfer-dev_${TENSORRT_VERSION}-1+cuda${CUDA_MAJOR_VERSION}.${CUDA_MINOR_VERSION}_amd64.deb && \
+    dpkg -i /nvinfer/libnvinfer.deb /nvinfer/libnvinfer-dev.deb && \
+    rm -rf /nvinfer
 
 # Configure the build for our CUDA configuration.
 ENV CI_BUILD_PYTHON python
-ENV LD_LIBRARY_PATH /usr/local/cuda/extras/CUPTI/lib64:$LD_LIBRARY_PATH
-ENV TF_NEED_CUDA 1
+ENV LD_LIBRARY_PATH=/usr/local/cuda/extras/CUPTI/lib64:$LD_LIBRARY_PATH
+ENV TF_NEED_CUDA=1
 ENV TF_NEED_TENSORRT 1
-ENV TF_CUDA_COMPUTE_CAPABILITIES=6.0,6.1,7.0
-ENV TF_CUDA_VERSION=10.0
-ENV TF_CUDNN_VERSION=7
+ENV TF_CUDA_COMPUTE_CAPABILITIES=7.0
+ENV TF_CUDA_VERSION=${CUDA_MAJOR_VERSION}.${CUDA_MINOR_VERSION}
+ENV TF_CUDNN_VERSION=${CUDNN_MAJOR_VERSION}
 
-ARG USE_PYTHON_3_NOT_2
+ARG USE_PYTHON_3_NOT_2=1
 ARG _PY_SUFFIX=${USE_PYTHON_3_NOT_2:+3}
 ARG PYTHON=python${_PY_SUFFIX}
 ARG PIP=pip${_PY_SUFFIX}
@@ -102,22 +100,22 @@ ENV LANG C.UTF-8
 
 RUN apt-get update && apt-get install -y \
     ${PYTHON} \
-    ${PYTHON}-pip
+    ${PYTHON}-pip \
+    ${PYTHON}-dev \
+    ${PYTHON}-numpy \
+    ${PYTHON}-wheel \
+    ${PYTHON}-virtualenv \
+    ${PYTHON}-tk
 
 RUN ${PIP} --no-cache-dir install --upgrade \
     pip \
     setuptools
 
 # Some TF tools expect a "python" binary
-RUN ln -s $(which ${PYTHON}) /usr/local/bin/python 
+RUN ln -s $(which ${PYTHON}) /usr/local/bin/python
 
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    curl \
-    git \
-    wget \
     openjdk-8-jdk \
-    ${PYTHON}-dev \
     swig
 
 RUN ${PIP} --no-cache-dir install \
@@ -136,7 +134,7 @@ RUN ${PIP} --no-cache-dir install \
     enum34
 
 # Install bazel
-ARG BAZEL_VERSION=0.19.2
+ARG BAZEL_VERSION=0.22.0
 RUN mkdir /bazel && \
     wget -O /bazel/installer.sh "https://github.com/bazelbuild/bazel/releases/download/${BAZEL_VERSION}/bazel-${BAZEL_VERSION}-installer-linux-x86_64.sh" && \
     wget -O /bazel/LICENSE.txt "https://raw.githubusercontent.com/bazelbuild/bazel/master/LICENSE" && \
@@ -150,8 +148,8 @@ RUN mkdir /bazel && \
 # Check out and build TensorFlow source code
 RUN mkdir /tensorflow
 WORKDIR /tensorflow
-RUN git clone --branch=maskrcnn_trt --depth=1 https://github.com/aaroey/tensorflow.git .
-RUN git checkout maskrcnn_trt
+RUN git clone https://github.com/aaroey/tensorflow.git .
+RUN git checkout master
 
 # RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1 && \
 #     LD_LIBRARY_PATH=/usr/local/cuda/lib64/stubs:${LD_LIBRARY_PATH} \
