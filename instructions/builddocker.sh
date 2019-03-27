@@ -40,19 +40,6 @@ convert() {
   docker run --runtime=nvidia --rm -v /tmp:/tmp -it $TFTRT_MASKRCNN_TAG \
     bash -c "rm -rf $TRT_SAVED_MODEL_DIR;
     python $WORKING_DIR/convert_maskrcnn.py $SAVED_MODEL_DIR $TRT_SAVED_MODEL_DIR"
-  return
-
-  docker run --runtime=nvidia --rm -v /tmp:/tmp -it $TFTRT_MASKRCNN_TAG \
-    bash -c "rm -rf $TRT_SAVED_MODEL_DIR;
-    /usr/local/bin/saved_model_cli convert \
-    --dir $SAVED_MODEL_DIR \
-    --output_dir $TRT_SAVED_MODEL_DIR \
-    --tag_set serve \
-    tensorrt \
-    --minimum_segment_size 3 \
-    --max_workspace_size_bytes 1073741824 \
-    --precision_mode FP16 \
-    --is_dynamic_op True"
 }
 run() {
   curl -O $GITHUB_URL_PREFIX/cat.1472x896.jpg
@@ -72,5 +59,3 @@ run() {
 if [[ "$1" == 'rebuild' ]]; then
   build
 fi
-convert
-run

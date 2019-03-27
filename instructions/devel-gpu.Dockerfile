@@ -135,6 +135,9 @@ WORKDIR /tensorflow
 RUN git clone https://github.com/aaroey/tensorflow.git .
 RUN git checkout master
 
+# RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1 && \
+#     LD_LIBRARY_PATH=/usr/local/cuda/lib64/stubs:${LD_LIBRARY_PATH} \
+#   rm /usr/local/cuda/lib64/stubs/libcuda.so.1 && \
 RUN tensorflow/tools/ci_build/builds/configured GPU \
     bazel build -c opt --copt=-mavx --config=cuda \
         --cxxopt="-D_GLIBCXX_USE_CXX11_ABI=0" \
