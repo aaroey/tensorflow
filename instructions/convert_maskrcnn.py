@@ -12,9 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import io
-import six
-
+import sys
 import tensorflow as tf
 from tensorflow.python.compiler.tensorrt import trt_convert as trt
 
@@ -27,12 +25,14 @@ rewriter_config.optimizers.extend([
 rewriter_config.meta_optimizer_iterations = (
     rewriter_config_pb2.RewriterConfig.ONE)
 
+saved_model_dir = sys.argv[1]
+trt_saved_model_dir = sys.argv[2]
 converter = trt.TrtGraphConverter(
-    input_saved_model_dir="/tmp/maskrcnn",
+    input_saved_model_dir=saved_model_dir,
     session_config=config,
     max_workspace_size_bytes=1 << 30,
     precision_mode="FP16",
     is_dynamic_op=True,
     use_function_backup=False)
 converter.convert()
-converter.save("/tmp/maskrcnn-trt")
+converter.save(trt_saved_model_dir)

@@ -13,41 +13,6 @@
 # limitations under the License.
 
 # ==============================================================================
-# Below are old instructions to use customized TF repo (outdated):
-#
-# $ mkdir /tmp/maskrcnn
-# $ cd /tmp/maskrcnn
-# $ export TFTRT_MASKRCNN_TAG=lam8da/aaroey-tensorflow:tf-trt-maskrcnn-test
-# $ docker pull $TFTRT_MASKRCNN_TAG
-# $ rm -rf /tmp/maskrcnn-trt
-# $ docker run --runtime=nvidia --rm -v /tmp:/tmp -it $TFTRT_MASKRCNN_TAG \
-#       /usr/local/bin/saved_model_cli convert                            \
-#       --dir <maskrcnn saved model dir>                                  \
-#       --output_dir /tmp/maskrcnn-trt                                    \
-#       --tag_set serve                                                   \
-#       tensorrt                                                          \
-#       --minimum_segment_size 3                                          \
-#       --max_workspace_size_bytes 1073741824                             \
-#       --precision_mode FP16                                             \
-#       --is_dynamic_op True
-# $ docker run --runtime=nvidia --rm -v /tmp:/tmp -it $TFTRT_MASKRCNN_TAG \
-#       TF_CPP_VMODULE=convert_nodes=1,segment=1,trt_logger=1             \
-#       TF_CPP_MIN_VLOG_LEVEL=0                                           \
-#       num_threads=4                                                     \
-#       num_requests=200                                                  \
-#       model_dir=/tmp/maskrcnn-trt                                       \
-#       input_file=/tmp/cat.1472x896.jpg                                  \
-#       resize_to_width=1472                                              \
-#       resize_to_height=896                                              \
-#       bazel-bin/instructions/profile_maskrcnn_cc
-#
-# (For debugging only) Notes: instead of 'docker pull', we can also build
-# the docker image using this Dockerfile. The result will be similar, but the
-# pulled version is smaller since it cleans up bazel cache after building TF. To
-# build, run:
-# $ curl -O https://raw.githubusercontent.com/aaroey/tensorflow/maskrcnn_trt/instructions/devel-gpu.Dockerfile
-# $ docker build --pull -t $TFTRT_MASKRCNN_TAG -f /tmp/maskrcnn/devel-gpu.Dockerfile ./  # This will take a while
-
 ARG UBUNTU_VERSION=16.04
 ARG CUDA_MAJOR_VERSION=9
 ARG CUDA_MINOR_VERSION=0
@@ -170,25 +135,21 @@ WORKDIR /tensorflow
 RUN git clone https://github.com/aaroey/tensorflow.git .
 RUN git checkout master
 
-# RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1 && \
-#     LD_LIBRARY_PATH=/usr/local/cuda/lib64/stubs:${LD_LIBRARY_PATH} \
-#   rm /usr/local/cuda/lib64/stubs/libcuda.so.1 && \
-RUN tensorflow/tools/ci_build/builds/configured GPU \
-    bazel build -c opt --copt=-mavx --config=cuda \
-        --cxxopt="-D_GLIBCXX_USE_CXX11_ABI=0" \
-        tensorflow/tools/pip_package:build_pip_package && \
-    bazel-bin/tensorflow/tools/pip_package/build_pip_package /tmp/pip && \
-    pip --no-cache-dir install --upgrade /tmp/pip/tensorflow-*.whl && \
-    rm -rf /tmp/pip
+# RUN tensorflow/tools/ci_build/builds/configured GPU \
+#     bazel build -c opt --copt=-mavx --config=cuda \
+#         --cxxopt="-D_GLIBCXX_USE_CXX11_ABI=0" \
+#         tensorflow/tools/pip_package:build_pip_package && \
+#     bazel-bin/tensorflow/tools/pip_package/build_pip_package /tmp/pip && \
+#     pip --no-cache-dir install --upgrade /tmp/pip/tensorflow-*.whl && \
+#     rm -rf /tmp/pip
 # Clean up pip wheel (but not Bazel cache) when done.
 # rm -rf /root/.cache
 
 ENV REPRO_CODE=https://raw.githubusercontent.com/aaroey/tensorflow/maskrcnn_trt/instructions
-RUN mkdir maskrcnn && \
+RUN tensorflow/tools/ci_build/builds/configured GPU \
+    mkdir maskrcnn && \
     wget -O maskrcnn/profile_maskrcnn.cc ${REPRO_CODE}/profile_maskrcnn.cc && \
     wget -O maskrcnn/BUILD ${REPRO_CODE}/BUILD && \
     bazel build -c opt --copt=-mavx --config=cuda \
         --cxxopt="-D_GLIBCXX_USE_CXX11_ABI=0" \
-        maskrcnn:profile_maskrcnn_cc && \
-    cp bazel-bin/maskrcnn/profile_maskrcnn_cc ./
-
+        maskrcnn:profile_maskrcnn_cc

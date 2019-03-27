@@ -43,7 +43,7 @@ string FLAGS_input_file = "";
 int64 FLAGS_resize_to_width = 1472;
 int64 FLAGS_resize_to_height = 896;
 
-#define MYLOG LOG(ERROR) << "------------------------> "
+#define MYLOG LOG(INFO) << "------------------------> "
 
 struct Options {
   int num_threads;
