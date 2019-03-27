@@ -18,10 +18,12 @@
 # 1. download this script
 # 2. copy the trained MaskRCNN SavedModel to /tmp/maskrcnn
 # 3. run this script
+# 4. (optional) run this script by passing a 'rebuild' argument if we want to
+#    rebuild the docker image instead of pulling it from docker hub.
 set -x
 
 GITHUB_URL_PREFIX=https://raw.githubusercontent.com/aaroey/tensorflow/maskrcnn_trt/instructions
-TFTRT_MASKRCNN_TAG=lam8da/aaroey-tensorflow:tf-trt-maskrcnn-test-with-repro
+TFTRT_MASKRCNN_TAG=lam8da/aaroey-tensorflow:tf-trt-maskrcnn-test
 
 WORKING_DIR=/tmp/maskrcnntest
 SAVED_MODEL_DIR=/tmp/maskrcnn
