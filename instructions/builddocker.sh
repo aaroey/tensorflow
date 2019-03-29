@@ -49,6 +49,7 @@ run() {
     -e num_threads=4 \
     -e num_requests=200 \
     -e model_dir=$TRT_SAVED_MODEL_DIR \
+    -e fetches=DetectionBoxes:0,DetectionClasses:0,DetectionMasks:0,DetectionScores:0,ImageInfo:0,NumDetections:0,SourceId:0 \
     -e input_file=$WORKING_DIR/cat.1472x896.jpg \
     -e resize_to_width=1472 \
     -e resize_to_height=896 \

@@ -38,6 +38,9 @@ using tensorflow::string;
 int64 FLAGS_num_threads = 1;
 int64 FLAGS_num_requests = 100;
 string FLAGS_model_dir = "";
+string FLAGS_fetches =
+    "DetectionBoxes:0,DetectionClasses:0,DetectionMasks:0,DetectionScores:0,"
+    "ImageInfo:0,NumDetections:0,SourceId:0";
 
 string FLAGS_input_file = "";
 int64 FLAGS_resize_to_width = 1472;
@@ -141,14 +144,15 @@ Tensor InputTensor(const Options& opts) {
   return *input_tensor;
 }  // namespace tensorflow
 
-void MyComputeFn(Session* session, const Options& opts, int runs) {
+void MyComputeFn(Session* session,
+                 const Options& opts,
+                 const std::vector<string>& fetches,
+                 int runs) {
   std::vector<Tensor> outputs;
   for (int i = 0; i < runs; ++i) {
     outputs.clear();
-    TF_CHECK_OK(session->Run({{"Placeholder:0", InputTensor(opts)}},
-                             {"Detections:0", "Sigmoid:0", "ImageInfo:0"},
-                             {},
-                             &outputs));
+    TF_CHECK_OK(session->Run(
+        {{"Placeholder:0", InputTensor(opts)}}, fetches, {}, &outputs));
   }
 }
 
@@ -171,9 +175,11 @@ int64 ConcurrentSteps(Options opts) {
   std::unique_ptr<SavedModelBundle> bundle =
       CreateSessionFromSavedModel(&sess_options, opts);
   Session* session = bundle->session.get();
+  std::vector<string> fetches =
+      absl::strings::Split(GetFlag(FLAGS_fetches), ',');
 
   MYLOG << "warming up...";
-  MyComputeFn(session, opts, 3);
+  MyComputeFn(session, opts, fetches, 3);
   MYLOG << "warm up complete, starting eval...";
   std::unique_ptr<thread::ThreadPool> step_threads;
   if (opts.num_threads > 1) {
@@ -183,7 +189,8 @@ int64 ConcurrentSteps(Options opts) {
   const int64 before = sess_options.env->NowMicros();
   if (opts.num_threads > 1) {
     for (int step = 0; step < opts.num_requests; ++step) {
-      step_threads->Schedule(std::bind(&MyComputeFn, session, opts, 1));
+      step_threads->Schedule(
+          std::bind(&MyComputeFn, session, opts, fetches, 1));
     }
     step_threads.reset(nullptr);  // Wait for all threads to complete.
   } else {
@@ -202,9 +209,9 @@ int main(int argc, char* argv[]) {
   opts.num_threads = tensorflow::GetFlag(tensorflow::FLAGS_num_threads);
   opts.num_requests = tensorflow::GetFlag(tensorflow::FLAGS_num_requests);
   tensorflow::int64 elapsed = tensorflow::ConcurrentSteps(opts);
-  MYLOG << "eval on "
-        << opts.num_requests << " requests with " << opts.num_threads
-        << " threads took " << elapsed << " us, = " << elapsed / 1000000.0
+  MYLOG << "eval on " << opts.num_requests << " requests with "
+        << opts.num_threads << " threads took " << elapsed
+        << " us, = " << elapsed / 1000000.0
         << " seconds. Mean latency: " << elapsed / 1000.0 / opts.num_requests
         << " ms";
 }
