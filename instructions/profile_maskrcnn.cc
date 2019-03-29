@@ -43,6 +43,7 @@ string FLAGS_fetches =
     "ImageInfo:0,NumDetections:0,SourceId:0";
 
 string FLAGS_input_file = "";
+bool FLAGS_use_jpeg_input = false;
 int64 FLAGS_resize_to_width = 1472;
 int64 FLAGS_resize_to_height = 896;
 
@@ -113,8 +114,7 @@ Tensor InputTensor(const Options& opts) {
     QCHECK_EQ(3, components);
   }
 
-  input_tensor =
-      new Tensor(DT_FLOAT, TensorShape({1, new_height, new_width, 3}));
+  std::unique_ptr<uint8[]> data_uint8;
   {
     jpeg::UncompressFlags uncompress_flags;
     uncompress_flags.crop = true;
@@ -123,24 +123,35 @@ Tensor InputTensor(const Options& opts) {
     uncompress_flags.crop_width = new_width;
     uncompress_flags.crop_height = new_height;
     int actual_width = 0, actual_height = 0, actual_components = 0;
-    std::unique_ptr<uint8[]> data_uint8(jpeg::Uncompress(data_str.c_str(),
-                                                         data_str.size(),
-                                                         uncompress_flags,
-                                                         &actual_width,
-                                                         &actual_height,
-                                                         &actual_components,
-                                                         /*nwarn=*/nullptr));
+    data_uint8.reset(jpeg::Uncompress(data_str.c_str(),
+                                      data_str.size(),
+                                      uncompress_flags,
+                                      &actual_width,
+                                      &actual_height,
+                                      &actual_components,
+                                      /*nwarn=*/nullptr));
     MYLOG << "Size after cropping: " << actual_width << "x" << actual_height
           << "x" << actual_components;
     QCHECK_EQ(actual_width, new_width);
     QCHECK_EQ(actual_height, new_height);
     QCHECK_EQ(actual_components, 3);
+  }
 
+  if (GetFlag(FLAGS_use_jpeg_input)) {
+    input_tensor = new Tensor(DT_STRING, TensorShape({1}));
+    jpeg::CompressFlags compress_flags;
+    compress_flags.format = jpeg::FORMAT_RGB;
+    input_tensor->scalar<string>()() = jpeg::Compress(
+        data_uint8.get(), new_width, new_height, compress_flags);
+  } else {
+    input_tensor =
+        new Tensor(DT_FLOAT, TensorShape({1, new_height, new_width, 3}));
     float* data = input_tensor->flat<float>().data();
     for (int i = 0; i < input_tensor->NumElements(); ++i) {
       data[i] = static_cast<float>(data_uint8[i]) / 255.0f;
     }
   }
+
   return *input_tensor;
 }  // namespace tensorflow
 
