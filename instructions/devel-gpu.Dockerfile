@@ -149,9 +149,9 @@ RUN tensorflow/tools/ci_build/builds/configured GPU \
 # rm -rf /root/.cache
 
 ENV REPRO_CODE=https://raw.githubusercontent.com/aaroey/tensorflow/maskrcnn_trt/instructions
-RUN mkdir maskrcnn && \
-    wget -O maskrcnn/profile_maskrcnn.cc ${REPRO_CODE}/profile_maskrcnn.cc && \
-    wget -O maskrcnn/BUILD ${REPRO_CODE}/BUILD && \
-    bazel build -c opt --copt=-mavx --config=cuda \
+RUN mkdir maskrcnn
+ADD ${REPRO_CODE}/profile_maskrcnn.cc maskrcnn/
+ADD ${REPRO_CODE}/BUILD maskrcnn/BUILD
+RUN bazel build -c opt --copt=-mavx --config=cuda \
         --cxxopt="-D_GLIBCXX_USE_CXX11_ABI=0" \
         maskrcnn:profile_maskrcnn_cc

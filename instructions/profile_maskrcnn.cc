@@ -193,7 +193,7 @@ int64 ConcurrentSteps(Options opts) {
     }
     step_threads.reset(nullptr);  // Wait for all threads to complete.
   } else {
-    MyComputeFn(session, opts, opts.num_requests);
+    MyComputeFn(session, opts, fetches, opts.num_requests);
   }
   const int64 elapsed = sess_options.env->NowMicros() - before;
   return elapsed;
