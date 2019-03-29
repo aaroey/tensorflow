@@ -60,6 +60,8 @@ run() {
 
 if [[ "$1" == 'rebuild' ]]; then
   build
+else
+  docker pull $TFTRT_MASKRCNN_TAG
 fi
 convert
 run
