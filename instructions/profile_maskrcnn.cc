@@ -175,8 +175,7 @@ int64 ConcurrentSteps(Options opts) {
   std::unique_ptr<SavedModelBundle> bundle =
       CreateSessionFromSavedModel(&sess_options, opts);
   Session* session = bundle->session.get();
-  std::vector<string> fetches =
-      absl::strings::Split(GetFlag(FLAGS_fetches), ',');
+  std::vector<string> fetches = strings::Split(GetFlag(FLAGS_fetches), ',');
 
   MYLOG << "warming up...";
   MyComputeFn(session, opts, fetches, 3);

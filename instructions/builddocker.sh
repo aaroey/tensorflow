@@ -20,7 +20,7 @@
 # 3. run this script
 # 4. (optional) run this script by passing a 'rebuild' argument if we want to
 #    rebuild the docker image instead of pulling it from docker hub.
-set -x
+set -ex
 
 GITHUB_URL_PREFIX=https://raw.githubusercontent.com/aaroey/tensorflow/maskrcnn_trt/instructions
 TFTRT_MASKRCNN_TAG=lam8da/aaroey-tensorflow:tf-trt-maskrcnn-test
