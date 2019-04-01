@@ -133,7 +133,7 @@ RUN mkdir /bazel && \
 RUN mkdir /tensorflow
 WORKDIR /tensorflow
 RUN git clone https://github.com/aaroey/tensorflow.git .
-RUN git checkout maskrcnn_trt
+RUN git checkout master
 
 # RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1 && \
 #     LD_LIBRARY_PATH=/usr/local/cuda/lib64/stubs:${LD_LIBRARY_PATH} \
