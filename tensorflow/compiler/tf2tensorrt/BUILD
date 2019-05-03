@@ -558,3 +558,22 @@ tf_py_wrap_cc(
         "//third_party/python_runtime:headers",
     ],
 )
+
+tf_cuda_cc_test(
+    name = "enabled_by_default_test",
+    size = "small",
+    srcs = ["enabled_by_default_test.cc"],
+    tags = [
+        "no_cuda_on_cpu_tap",
+        "no_windows",
+        "nomac",
+    ],
+    deps = [
+        ":py_utils",
+        "//tensorflow/core:test_main",
+    #] + if_tensorrt([
+        "@local_config_tensorrt//:tensorrt",
+    #]),
+    ],
+)
+
