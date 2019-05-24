@@ -412,4 +412,26 @@ REGISTER_KERNEL_BUILDER(Name("Placeholder").Device(DEVICE_SYCL), PlaceholderOp);
 REGISTER_KERNEL_BUILDER(Name("PlaceholderV2").Device(DEVICE_SYCL),
                         PlaceholderOp);
 #endif  // TENSORFLOW_USE_SYCL
+
+class XPUAddOp : public OpKernel {
+ public:
+  explicit XPUAddOp(OpKernelConstruction* ctx) : OpKernel(ctx) {}
+  void Compute(OpKernelContext* ctx) override {
+    LOG(ERROR) << "-------> XPUAddOp::Compute()";
+    Tensor* output = nullptr;
+    OP_REQUIRES_OK(ctx, ctx->allocate_output(0, ctx->input(0).shape(), &output));
+    output->flat<float>().data()[0] = 12345;
+  }
+};
+REGISTER_KERNEL_BUILDER(Name("Add").Device("XPU"), XPUAddOp);
+
+class XPUNoOp : public OpKernel {
+ public:
+  explicit XPUNoOp(OpKernelConstruction* ctx) : OpKernel(ctx) {}
+  void Compute(OpKernelContext* ctx) override {
+    LOG(ERROR) << "-------> XPUNoOp::Compute()";
+  }
+};
+REGISTER_KERNEL_BUILDER(Name("NoOp").Device("XPU"), XPUNoOp);
+
 }  // namespace tensorflow

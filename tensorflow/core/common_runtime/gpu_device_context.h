@@ -80,6 +80,31 @@ class GPUDeviceContext : public DeviceContext {
   gtl::InlinedVector<se::Stream*, 4> device_to_device_stream_;
 };
 
+class XPUDeviceContext : public DeviceContext {
+ public:
+  // Does not take ownership of streams.
+  ~XPUDeviceContext() override {}
+
+  void CopyCPUTensorToDevice(const Tensor* cpu_tensor, Device* device,
+                             Tensor* device_tensor,
+                             StatusCallback done) const override;
+
+  void CopyDeviceTensorToCPU(const Tensor* device_tensor, StringPiece edge_name,
+                             Device* device, Tensor* cpu_tensor,
+                             StatusCallback done) override;
+
+  void CopyTensorInSameDevice(const Tensor* input_tensor, Device* device,
+                              Tensor* output_tensor,
+                              StatusCallback done) const override;
+
+  // Not used.
+  //void MaintainLifetimeOnStream(const Tensor* t,
+  //                              se::Stream* stream) const override {}
+
+  //Status ThenExecute(Device* device, se::Stream* stream,
+  //                   std::function<void()> func) override;
+};
+
 }  // namespace tensorflow
 
 #endif  // TENSORFLOW_CORE_COMMON_RUNTIME_GPU_DEVICE_CONTEXT_H_

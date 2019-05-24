@@ -74,6 +74,47 @@ class GPUDeviceFactory : public BaseGPUDeviceFactory {
 
 REGISTER_LOCAL_DEVICE_FACTORY("GPU", GPUDeviceFactory, 210);
 
+class XPUDevice : public LocalDevice {
+ public:
+  XPUDevice(const SessionOptions& options,
+            const DeviceAttributes& attributes)
+      : LocalDevice(options, attributes) {}
+
+  Status Sync() override { return Status::OK(); }
+
+  Allocator* GetAllocator(AllocatorAttributes attr) override {
+    //QCHECK(false) << "xpu device allocator not implemented.";
+    return ProcessState::singleton()->GetCPUAllocator(0);
+  }
+
+  Status FillContextMap(const Graph* graph,
+                        DeviceContextMap* device_context_map) override {
+    static XPUDeviceContext* ctx = new XPUDeviceContext;
+    device_context_map->resize(graph->num_node_ids());
+    for (Node* n : graph->nodes()) {
+      ctx->Ref();
+      (*device_context_map)[n->id()] = ctx;
+    }
+    return Status::OK();
+  }
+};
+
+class XPUDeviceFactory : public DeviceFactory {
+ private:
+  Status CreateDevices(const SessionOptions& options, const string& name_prefix,
+                       std::vector<std::unique_ptr<Device>>* devices) override {
+    devices->emplace_back(new XPUDevice(
+        options,
+        Device::BuildDeviceAttributes(
+            name_prefix + "/device:XPU:0", "XPU", static_cast<Bytes>(2<<30),
+            DeviceLocality{},
+            "this is my xpu")));
+    return Status::OK();
+  }
+};
+
+REGISTER_LOCAL_DEVICE_FACTORY("XPU", XPUDeviceFactory, 210);
+
 //------------------------------------------------------------------------------
 // A CPUDevice that optimizes for interaction with GPUs in the
 // process.

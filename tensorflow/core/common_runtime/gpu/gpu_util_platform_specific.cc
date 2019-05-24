@@ -55,4 +55,28 @@ Status GPUDeviceContext::ThenExecute(Device* device, se::Stream* stream,
   return Status::OK();
 }
 
+void XPUDeviceContext::CopyCPUTensorToDevice(const Tensor* cpu_tensor,
+                                             Device* device,
+                                             Tensor* device_tensor,
+                                             StatusCallback done) const {
+  *device_tensor = *cpu_tensor;
+  done(Status::OK());
+}
+
+void XPUDeviceContext::CopyDeviceTensorToCPU(const Tensor* device_tensor,
+                                             StringPiece tensor_name,
+                                             Device* device, Tensor* cpu_tensor,
+                                             StatusCallback done) {
+  *cpu_tensor = *device_tensor;
+  done(Status::OK());
+}
+
+void XPUDeviceContext::CopyTensorInSameDevice(const Tensor* input_tensor,
+                                              Device* device,
+                                              Tensor* output_tensor,
+                                              StatusCallback done) const {
+  *output_tensor = *input_tensor;
+  done(Status::OK());
+}
+
 }  // namespace tensorflow
