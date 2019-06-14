@@ -25,12 +25,13 @@ port::Status MaybeTryDlopenCUDALibraries() {
   auto cublas_status = GetCublasDsoHandle();
   auto cufft_status = GetCufftDsoHandle();
   auto curand_status = GetCurandDsoHandle();
-  auto cusolver_status = GetCusolverDsoHandle();
+  //auto cusolver_status = GetCusolverDsoHandle();
   auto cusparse_status = GetCusparseDsoHandle();
   auto cudnn_status = GetCudnnDsoHandle();
   if (!cudart_status.status().ok() || !cublas_status.status().ok() ||
       !cufft_status.status().ok() || !curand_status.status().ok() ||
-      !cusolver_status.status().ok() || !cusparse_status.status().ok() ||
+      //!cusolver_status.status().ok() ||
+      !cusparse_status.status().ok() ||
       !cudnn_status.status().ok()) {
     return port::Status(port::error::INTERNAL,
                         absl::StrCat("Cannot dlopen all CUDA libraries."));

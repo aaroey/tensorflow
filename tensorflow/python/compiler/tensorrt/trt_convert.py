@@ -20,6 +20,7 @@ from __future__ import print_function
 
 import collections
 import os
+import platform
 import tempfile
 
 import six as _six
@@ -60,7 +61,7 @@ gen_trt_ops = LazyLoader("gen_trt_ops", globals(),
 # Register TRT ops in python, so that when users import this module they can
 # execute a TRT-converted graph without calling any of the methods in this
 # module.
-if is_tensorrt_enabled():
+if wrap_py_utils.is_tensorrt_enabled():
   if platform.system() == "Windows":
     raise RuntimeError("Windows platforms are not supported")
 

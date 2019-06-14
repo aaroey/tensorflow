@@ -1439,6 +1439,9 @@ cc_library(
     ] + if_mkl([
         ":mkl_array_ops_op_lib",
         ":mkl_nn_ops_op_lib",
+    ]) + if_tensorrt([
+        "//tensorflow/compiler/tf2tensorrt:trt_engine_resource_ops_op_lib",
+        "//tensorflow/compiler/tf2tensorrt:trt_op_libs",
     ]) + tf_additional_cloud_op_deps(),
     alwayslink = 1,
 )
