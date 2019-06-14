@@ -169,6 +169,7 @@ load(
     "tf_cuda_tests_tags",
 )
 load("@local_config_cuda//cuda:build_defs.bzl", "if_cuda")
+load("@local_config_tensorrt//:build_defs.bzl", "if_tensorrt")
 load("@io_bazel_rules_closure//closure:defs.bzl", "closure_proto_library")
 load(
     "//third_party/mkl:build_defs.bzl",
@@ -1610,6 +1611,9 @@ cc_library(
         "//tensorflow/core/grappler/optimizers:gpu_swapping_ops",
     ]) + if_nccl([
         "//tensorflow/core/kernels:nccl_kernels",
+    ]) + if_tensorrt([
+        "//tensorflow/compiler/tf2tensorrt:trt_engine_resource_op_kernels",
+        "//tensorflow/compiler/tf2tensorrt:trt_op_kernels",
     ]),
 )
 

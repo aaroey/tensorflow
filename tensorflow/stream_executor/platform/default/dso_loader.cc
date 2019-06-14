@@ -32,6 +32,8 @@ namespace {
 string GetCudaVersion() { return TF_CUDA_VERSION; }
 string GetCudaLibVersion() { return TF_CUDA_LIB_VERSION; }
 string GetCudnnVersion() { return TF_CUDNN_VERSION; }
+
+#define TF_TENSORRT_VERSION "5"
 string GetTensorRTVersion() { return TF_TENSORRT_VERSION; }
 
 port::StatusOr<void*> GetDsoHandle(const string& name, const string& version) {
