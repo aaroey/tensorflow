@@ -33,6 +33,7 @@ from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_shape
+from tensorflow.python.framework import tensor_spec
 from tensorflow.python.framework import test_util
 from tensorflow.python.keras import keras_parameterized
 from tensorflow.python.keras import testing_utils
@@ -103,6 +104,32 @@ class BaseLayerTest(keras_parameterized.TestCase):
       with self.assertRaisesRegexp(
           ValueError, 'You must enable eager execution'):
         model.compile(rmsprop.RMSprop(0.001), loss='mse')
+
+  def test_manual_compute_output_shape(self):
+    class BuildCounter(keras.layers.Layer):
+
+      def __init__(self, *args, **kwargs):  # pylint: disable=redefined-outer-name
+        super(BuildCounter, self).__init__(*args, **kwargs)
+        self.build_counter = 0
+
+      def build(self, input_shape):
+        self.build_counter += 1
+
+      def call(self, inputs):
+        return inputs
+
+    with context.eager_mode():
+      layer = BuildCounter()
+      output_shape = layer.compute_output_shape((None, 10))
+      self.assertEqual(layer.build_counter, 1)
+      self.assertEqual(output_shape.as_list(), [None, 10])
+      output_signature = layer.compute_output_signature(
+          tensor_spec.TensorSpec(dtype=dtypes.float64, shape=[None, 10]))
+      self.assertEqual(layer.build_counter, 1)
+      self.assertEqual(output_signature.dtype, dtypes.float64)
+      self.assertEqual(output_signature.shape.as_list(), [None, 10])
+      layer(np.ones((5, 10)))
+      self.assertEqual(layer.build_counter, 1)
 
   def test_dynamic_layer_with_deferred_sequential_model(self):
     model = keras.Sequential(
@@ -771,6 +798,24 @@ class NameScopingTest(keras_parameterized.TestCase):
 
 class AutographControlFlowTest(keras_parameterized.TestCase):
 
+  def test_disabling_in_context_is_matched(self):
+
+    test_obj = self
+
+    class MyLayer(keras.layers.Layer):
+
+      def call(self, inputs, training=None):
+        with test_obj.assertRaisesRegex(TypeError, 'Tensor.*as.*bool'):
+          if constant_op.constant(False):
+            return inputs * 1.
+        return inputs * 0.
+
+    @def_function.function(autograph=False)
+    def test_fn():
+      return MyLayer()(constant_op.constant([[1., 2., 3.]]))
+
+    test_fn()
+
   @parameterized.named_parameters(('eager', True),
                                   ('symbolic', False))
   def test_if_training_pattern_output(self, eager):
@@ -872,7 +917,7 @@ class AutographControlFlowTest(keras_parameterized.TestCase):
     class MyLayer(keras.layers.Layer):
 
       def __init__(self):
-        super(MyLayer, self).__init__(self, dynamic=eager)
+        super(MyLayer, self).__init__(dynamic=eager)
 
       def build(self, input_shape):
         self.counter = self.add_weight(
@@ -910,7 +955,7 @@ class AutographControlFlowTest(keras_parameterized.TestCase):
     class MyLayer(keras.layers.Layer):
 
       def __init__(self):
-        super(MyLayer, self).__init__(self, dynamic=eager)
+        super(MyLayer, self).__init__(dynamic=eager)
 
       def call(self, inputs, training=None):
         if training:
@@ -961,7 +1006,7 @@ class AutographControlFlowTest(keras_parameterized.TestCase):
     class MyLayer(keras.layers.Layer):
 
       def __init__(self):
-        super(MyLayer, self).__init__(self, dynamic=eager)
+        super(MyLayer, self).__init__(dynamic=eager)
 
       def call(self, inputs, training=None):
         if training:

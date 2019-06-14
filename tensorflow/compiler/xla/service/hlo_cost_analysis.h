@@ -61,6 +61,8 @@ class HloCostAnalysis : public ConstDfsHloVisitor {
   Status HandleClamp(const HloInstruction* clamp) override;
   Status HandleReducePrecision(const HloInstruction* hlo) override;
   Status HandleConcatenate(const HloInstruction* concatenate) override;
+  Status HandleCopyStart(const HloInstruction* send) override;
+  Status HandleCopyDone(const HloInstruction* send_done) override;
   Status HandleSend(const HloInstruction* send) override;
   Status HandleSendDone(const HloInstruction* send_done) override;
   Status HandleRecv(const HloInstruction* recv) override;
@@ -81,6 +83,7 @@ class HloCostAnalysis : public ConstDfsHloVisitor {
   Status HandleInfeed(const HloInstruction* infeed) override;
   Status HandleOutfeed(const HloInstruction* outfeed) override;
   Status HandleRng(const HloInstruction* random) override;
+  Status HandleRngGetAndUpdateState(const HloInstruction* random) override;
   Status HandleReverse(const HloInstruction* reverse) override;
   Status HandleSort(const HloInstruction* sort) override;
   Status HandleParameter(const HloInstruction* parameter) override;

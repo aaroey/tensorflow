@@ -413,6 +413,14 @@ Status HloCostAnalysis::HandlePad(const HloInstruction*) {
   return Status::OK();
 }
 
+Status HloCostAnalysis::HandleCopyStart(const HloInstruction*) {
+  return Status::OK();
+}
+
+Status HloCostAnalysis::HandleCopyDone(const HloInstruction*) {
+  return Status::OK();
+}
+
 Status HloCostAnalysis::HandleSend(const HloInstruction*) {
   return Status::OK();
 }
@@ -652,6 +660,11 @@ Status HloCostAnalysis::HandleRng(const HloInstruction* random) {
   // the cost of each RNG is same as a transcendental operation.
   current_properties_[kTranscendentalsKey] =
       ShapeUtil::ElementsIn(random->shape());
+  return Status::OK();
+}
+
+Status HloCostAnalysis::HandleRngGetAndUpdateState(
+    const HloInstruction* random) {
   return Status::OK();
 }
 
