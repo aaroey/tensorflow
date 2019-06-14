@@ -151,8 +151,16 @@ from tensorflow.python.ops import rnn_cell
 from tensorflow.python.compiler.xla import jit
 from tensorflow.python.compiler.xla import xla
 
-# TensorRT APIs
-from tensorflow.python.compiler import trt
+# TODO(laigd): consider adding TensorRT APIs after fixing this:
+# > tensorflow/python/compiler/tensorrt/trt_convert.py", line 47, in <module>
+# >     from tensorflow.python.saved_model import save
+# > tensorflow/python/saved_model/save.py", line 69, in <module>
+# >     class _AugmentedGraphView(graph_view.ObjectGraphView):
+# > AttributeError: module
+# > 'tensorflow.python.training.tracking.graph_view' has no attribute
+# > 'ObjectGraphView'
+#
+# from tensorflow.python.compiler.tensorrt import trt
 
 # Required due to `rnn` and `rnn_cell` not being imported in `nn` directly
 # (due to a circular dependency issue: rnn depends on layers).
