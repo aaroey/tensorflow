@@ -70,6 +70,18 @@ if wrap_py_utils.is_tensorrt_enabled():
   # the op or the op kernel in C++ runtime.
   gen_trt_ops.trt_engine_op
 
+# Register TRT ops in python, so that when users import this module they can
+# execute a TRT-converted graph without calling any of the methods in this
+# module.
+if wrap_py_utils.is_tensorrt_enabled():
+  if platform.system() == "Windows":
+    raise RuntimeError("Windows platform is not supported")
+
+  # This will call register_op_list() in
+  # tensorflow/python/framework/op_def_registry.py, but it doesn't register
+  # the op or the op kernel in C++ runtime.
+  gen_trt_ops.trt_engine_op  # pylint: disable=pointless-statement
+
 
 def _to_bytes(s):
   """Encode s if it is a sequence of chars."""

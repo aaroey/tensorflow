@@ -24,8 +24,7 @@ load(
 load("@local_config_tensorrt//:build_defs.bzl", "if_tensorrt")
 # Placeholder for Google-internal load statements.
 
-# NOTE: for this file in open source, if_static means "whether to link native
-# TensorRT library or stub library"
+# NOTE: we always assume that if_static returns "otherwise" list in open source.
 load(
     "//tensorflow/core:platform/default/build_config_root.bzl",
     "if_static",
