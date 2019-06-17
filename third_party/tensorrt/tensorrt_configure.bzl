@@ -61,6 +61,9 @@ def _create_dummy_repository(repository_ctx):
         "\":tensorrt_include\"": "",
         "\":tensorrt_lib\"": "",
     })
+    _tpl(repository_ctx, "tensorrt/include/tensorrt_config.h", {
+        "%{tensorrt_version}": "",
+    })
 
 def enable_tensorrt(repository_ctx):
     """Returns whether to build with TensorRT support."""
@@ -113,6 +116,12 @@ def _tensorrt_configure_impl(repository_ctx):
     # Set up BUILD file.
     _tpl(repository_ctx, "BUILD", {
         "%{copy_rules}": "\n".join(copy_rules),
+    })
+
+    # Set up tensorrt_config.h, which is used by
+    # tensorflow/stream_executor/dso_loader.cc.
+    _tpl(repository_ctx, "tensorrt/include/tensorrt_config.h", {
+        "%{tensorrt_version}": trt_version,
     })
 
 tensorrt_configure = repository_rule(
