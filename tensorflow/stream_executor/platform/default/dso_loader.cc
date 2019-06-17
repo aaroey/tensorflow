@@ -33,6 +33,8 @@ string GetCudaVersion() { return TF_CUDA_VERSION; }
 string GetCudaLibVersion() { return TF_CUDA_LIB_VERSION; }
 string GetCudnnVersion() { return TF_CUDNN_VERSION; }
 
+// TODO(laigd): populate the version string during configuration process. For
+// now hardcoded version 5 since 4.0 is not supported anyway.
 #define TF_TENSORRT_VERSION "5"
 string GetTensorRTVersion() { return TF_TENSORRT_VERSION; }
 
