@@ -53,17 +53,25 @@ def _tpl(repository_ctx, tpl, substitutions):
         substitutions,
     )
 
+def _file(repository_ctx, label):
+    repository_ctx.template(
+        label.replace(":", "/"),
+        Label("//third_party/tensorrt:%s" % label),
+        {},
+    )
+
 def _create_dummy_repository(repository_ctx):
     """Create a dummy TensorRT repository."""
     _tpl(repository_ctx, "build_defs.bzl", {"%{if_tensorrt}": "if_false"})
     _tpl(repository_ctx, "BUILD", {
         "%{copy_rules}": "",
-        "\":tensorrt_include\"": "",
+        "%{tensorrt_include}": "",
         "\":tensorrt_lib\"": "",
     })
     _tpl(repository_ctx, "tensorrt/include/tensorrt_config.h", {
         "%{tensorrt_version}": "",
     })
+    _file(repository_ctx, "LICENSE")
 
 def enable_tensorrt(repository_ctx):
     """Returns whether to build with TensorRT support."""
@@ -78,6 +86,16 @@ def _tensorrt_configure_impl(repository_ctx):
         repository_ctx.template(
             "build_defs.bzl",
             Label(remote_config_repo + ":build_defs.bzl"),
+            {},
+        )
+        repository_ctx.template(
+            "tensorrt/include/tensorrt_config.h",
+            Label(remote_config_repo + ":tensorrt/include/tensorrt_config.h"),
+            {},
+        )
+        repository_ctx.template(
+            "LICENSE",
+            Label(remote_config_repo + ":LICENSE"),
             {},
         )
         return
@@ -116,6 +134,7 @@ def _tensorrt_configure_impl(repository_ctx):
     # Set up BUILD file.
     _tpl(repository_ctx, "BUILD", {
         "%{copy_rules}": "\n".join(copy_rules),
+        "%{tensorrt_include}": "\":tensorrt_include\",",
     })
 
     # Set up tensorrt_config.h, which is used by
@@ -123,6 +142,9 @@ def _tensorrt_configure_impl(repository_ctx):
     _tpl(repository_ctx, "tensorrt/include/tensorrt_config.h", {
         "%{tensorrt_version}": trt_version,
     })
+
+    # Copy license file.
+    _file(repository_ctx, "LICENSE")
 
 tensorrt_configure = repository_rule(
     implementation = _tensorrt_configure_impl,
