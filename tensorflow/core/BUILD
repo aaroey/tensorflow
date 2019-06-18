@@ -264,7 +264,7 @@ tf_proto_library(
     name = "protos_all",
     srcs = [],
     cc_api_version = 2,
-    default_header = True,
+    make_default_target_header_only = True,
     protodeps = [
         ":protos_all_proto",
         ":error_codes_proto",
@@ -2312,7 +2312,7 @@ tf_proto_library(
     name = "autotuning_proto",
     srcs = ["protobuf/autotuning.proto"],
     cc_api_version = 2,
-    default_header = True,
+    make_default_target_header_only = True,
     provide_cc_alias = True,
     visibility = [
         "//tensorflow:internal",
@@ -2323,7 +2323,7 @@ tf_proto_library(
     name = "conv_autotuning_proto",
     srcs = ["protobuf/conv_autotuning.proto"],
     cc_api_version = 2,
-    default_header = True,
+    make_default_target_header_only = True,
     protodeps = [
         "//tensorflow/stream_executor:dnn_proto",
     ],
@@ -2753,7 +2753,7 @@ tf_proto_library(
     name = "error_codes_proto",
     srcs = ERROR_CODES_PROTO_SRCS,
     cc_api_version = 2,
-    default_header = True,
+    make_default_target_header_only = True,
     provide_cc_alias = True,
 )
 
@@ -2772,7 +2772,7 @@ tf_proto_library(
     name = "protos_all_proto",
     srcs = COMMON_PROTO_SRCS + ADDITIONAL_CORE_PROTO_SRCS,
     cc_api_version = 2,
-    default_header = True,
+    make_default_target_header_only = True,
     protodeps = [
         ":error_codes_proto",
     ],
@@ -3433,6 +3433,7 @@ tf_cuda_library(
         "//tensorflow/core/profiler/lib:profiler_graph_lib",
         "//tensorflow/core/profiler/lib:profiler_session",
         "//tensorflow/core/profiler/lib:traceme",
+        "@com_google_absl//absl/container:flat_hash_set",
     ],
     alwayslink = 1,
 )
@@ -3557,7 +3558,6 @@ tf_cuda_library(
         ":lib_internal",
         ":protos_all_cc",
         ":stream_executor",
-        "//tensorflow/core/profiler/lib:traceme",
         "//third_party/eigen3",
     ],
     alwayslink = 1,
@@ -4783,6 +4783,7 @@ tf_cuda_cc_test(
         ":test",
         ":test_main",
         ":testlib",
+        "@com_google_absl//absl/memory",
         "//third_party/eigen3",
         "//tensorflow/cc:cc_ops",
         "//tensorflow/core/kernels:collective_ops",
@@ -4824,6 +4825,7 @@ tf_cc_test(
         ":test_main",
         ":testlib",
         "//third_party/eigen3",
+        "@com_google_absl//absl/memory",
         "//tensorflow/cc:cc_ops",
         # Link with support for TensorFlow Debugger (tfdbg).
         "//tensorflow/core/debug",
