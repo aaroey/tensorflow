@@ -23,7 +23,8 @@ def run_and_time(saved_model_dir, ref_result=None):
   end_time = datetime.datetime.now()
 
   elapsed = end_time - start_time
-  result = result[result.keys()[0]]
+  # print(result)
+  result = result[list(result.keys())[0]]
 
   msgs.append("------> time for %d runs: %s" % (NUM_RUNS, str(elapsed)))
   if ref_result is not None:
@@ -38,10 +39,12 @@ mobilenet = tf.keras.applications.MobileNet()
 tf.saved_model.save(mobilenet, saved_model_dir)
 
 # Convert the SavedModel using TF-TRT
-converter = trt.TrtGraphConverter(
-    input_saved_model_dir=saved_model_dir,
-    precision_mode="FP16",
+params = trt.DEFAULT_TRT_CONVERSION_PARAMS._replace(
+    precision_mode='FP16',
     is_dynamic_op=True)
+converter = trt.TrtGraphConverterV2(
+    input_saved_model_dir=saved_model_dir,
+    conversion_params=params)
 converter.convert()
 saved_model_dir_trt = "/tmp/mobilenet.trt"
 converter.save(saved_model_dir_trt)
