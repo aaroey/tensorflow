@@ -13,33 +13,28 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/core/common_runtime/gpu/gpu_init.h"
-#include "tensorflow/core/platform/logging.h"
-#include "tensorflow/core/platform/stream_executor.h"
-#include "tensorflow/core/platform/test.h"
+#include <cassert>
+#include <iostream>
 
-#if GOOGLE_CUDA
-#if GOOGLE_TENSORRT
 #include "third_party/gpus/cuda/include/cuda.h"
 #include "third_party/gpus/cuda/include/cuda_runtime_api.h"
 #include "third_party/tensorrt/NvInfer.h"
 
-namespace tensorflow {
-namespace {
+using namespace std;
 
 class Logger : public nvinfer1::ILogger {
  public:
   void log(nvinfer1::ILogger::Severity severity, const char* msg) override {
     switch (severity) {
       case Severity::kINFO:
-        LOG(INFO) << msg;
+        cout << msg;
         break;
       case Severity::kWARNING:
-        LOG(WARNING) << msg;
+        cout << msg;
         break;
       case Severity::kINTERNAL_ERROR:
       case Severity::kERROR:
-        LOG(ERROR) << msg;
+        cerr << msg;
         break;
       default:
         break;
@@ -75,10 +70,10 @@ nvinfer1::IHostMemory* CreateNetwork() {
   // Add the input.
   auto input = network->addInput(kInputTensor, nvinfer1::DataType::kFLOAT,
                                  nvinfer1::DimsCHW{1, 1, 1});
-  EXPECT_NE(input, nullptr);
+  assert(input != nullptr);
   // Add the hidden layer.
   auto layer = network->addFullyConnected(*input, 1, weights.get(), bias.get());
-  EXPECT_NE(layer, nullptr);
+  assert(layer != nullptr);
   // Mark the output.
   auto output = layer->getOutput(0);
   output->setName(kOutputTensor);
@@ -87,7 +82,7 @@ nvinfer1::IHostMemory* CreateNetwork() {
   builder->setMaxBatchSize(1);
   builder->setMaxWorkspaceSize(1 << 10);
   auto engine = builder->buildCudaEngine(*network);
-  EXPECT_NE(engine, nullptr);
+  assert(engine != nullptr);
   // Serialize the engine to create a model, then close everything.
   nvinfer1::IHostMemory* model = engine->serialize();
   network->destroy();
@@ -102,43 +97,36 @@ void Execute(nvinfer1::IExecutionContext* context, const float* input,
   const nvinfer1::ICudaEngine& engine = context->getEngine();
 
   // We have two bindings: input and output.
-  ASSERT_EQ(engine.getNbBindings(), 2);
+  assert(engine.getNbBindings() == 2);
   const int input_index = engine.getBindingIndex(kInputTensor);
   const int output_index = engine.getBindingIndex(kOutputTensor);
 
   // Create GPU buffers and a stream
   void* buffers[2];
-  ASSERT_EQ(0, cudaMalloc(&buffers[input_index], sizeof(float)));
-  ASSERT_EQ(0, cudaMalloc(&buffers[output_index], sizeof(float)));
+  assert(0 == cudaMalloc(&buffers[input_index], sizeof(float)));
+  assert(0 == cudaMalloc(&buffers[output_index], sizeof(float)));
   cudaStream_t stream;
-  ASSERT_EQ(0, cudaStreamCreate(&stream));
+  assert(0 == cudaStreamCreate(&stream));
 
   // Copy the input to the GPU, execute the network, and copy the output back.
   //
   // Note that since the host buffer was not created as pinned memory, these
   // async copies are turned into sync copies. So the following synchronization
   // could be removed.
-  ASSERT_EQ(0, cudaMemcpyAsync(buffers[input_index], input, sizeof(float),
-                               cudaMemcpyHostToDevice, stream));
+  assert(0 == cudaMemcpyAsync(buffers[input_index], input, sizeof(float),
+                              cudaMemcpyHostToDevice, stream));
   context->enqueue(1, buffers, stream, nullptr);
-  ASSERT_EQ(0, cudaMemcpyAsync(output, buffers[output_index], sizeof(float),
-                               cudaMemcpyDeviceToHost, stream));
+  assert(0 == cudaMemcpyAsync(output, buffers[output_index], sizeof(float),
+                              cudaMemcpyDeviceToHost, stream));
   cudaStreamSynchronize(stream);
 
   // Release the stream and the buffers
   cudaStreamDestroy(stream);
-  ASSERT_EQ(0, cudaFree(buffers[input_index]));
-  ASSERT_EQ(0, cudaFree(buffers[output_index]));
+  assert(0 == cudaFree(buffers[input_index]));
+  assert(0 == cudaFree(buffers[output_index]));
 }
 
-TEST(TensorrtTest, BasicFunctions) {
-  // Handle the case where the test is run on machine with no gpu available.
-  if (CHECK_NOTNULL(GPUMachineManager())->VisibleDeviceCount() <= 0) {
-    LOG(WARNING) << "No gpu device available, probably not being run on a gpu "
-                    "machine. Skipping...";
-    return;
-  }
-
+int main() {
   // Create the network model.
   nvinfer1::IHostMemory* model = CreateNetwork();
   // Use the model to create an engine and then an execution context.
@@ -153,16 +141,11 @@ TEST(TensorrtTest, BasicFunctions) {
   float input = 1234;
   float output;
   Execute(context, &input, &output);
-  EXPECT_EQ(output, input * 2 + 3);
+  assert(output == input * 2 + 3);
 
   // Destroy the engine.
   context->destroy();
   engine->destroy();
   runtime->destroy();
+  return 0;
 }
-
-}  // namespace
-}  // namespace tensorflow
-
-#endif  // GOOGLE_TENSORRT
-#endif  // GOOGLE_CUDA

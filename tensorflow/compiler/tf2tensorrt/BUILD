@@ -13,6 +13,7 @@ load(
     "tf_gen_op_wrapper_py",
     "tf_gpu_kernel_library",
 )
+load("//tensorflow:tensorflow.bzl", "tf_cc_test")
 load("//tensorflow:tensorflow.bzl", "tf_cuda_cc_test")
 load("//tensorflow:tensorflow.bzl", "tf_custom_op_py_library")
 load("//tensorflow:tensorflow.bzl", "tf_py_wrap_cc")
@@ -22,6 +23,7 @@ load(
     "tf_proto_library",
 )
 load("@local_config_tensorrt//:build_defs.bzl", "if_tensorrt")
+load("@local_config_cuda//cuda:build_defs.bzl", "cuda_default_copts")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -29,6 +31,29 @@ package(
 )
 
 exports_files(["LICENSE"])
+
+# cp ~/Downloads/TensorRT-6.0.1.5.Ubuntu-14.04.x86_64-gnu.cuda-10.0.cudnn7.6/lib/libnvinfer_static.a tensorflow/compiler/tf2tensorrt/
+cc_library(
+    name = "nv_infer_static",
+    srcs = ["libnvinfer_static.a"],
+    copts = cuda_default_copts(),
+    data = ["libnvinfer_static.a"],
+    includes = ["include"],
+    linkopts = [
+        "-lrt",
+        "-ldl",
+        "-lpthread",
+        # This still doesn't work, not sure why, see https://github.com/bazelbuild/bazel/issues/2840
+        "-static-libstdc++",
+        "-l:libstdc++.a",
+    ],
+    linkstatic = 1,
+    visibility = ["//visibility:public"],
+    deps = [
+        "@local_config_cuda//cuda",
+        "@local_config_tensorrt//:tensorrt_headers",
+    ],
+)
 
 cc_library(
     name = "tensorrt_stub",
@@ -53,22 +78,18 @@ alias(
     visibility = ["//visibility:private"],
 )
 
-tf_cuda_cc_test(
+# $ bazel run --verbose_failures --jobs=32 -c opt --copt=-mavx --output_filter=DONT_MATCH_ANYTHING tensorflow/compiler/tf2tensorrt:tensorrt_test_cc
+cc_binary(
     name = "tensorrt_test_cc",
-    size = "small",
     srcs = ["tensorrt_test.cc"],
-    tags = [
-        "no_windows",
-        "nomac",
+    linkopts = [
+        "-static-libstdc++",
+        "-l:libstdc++.a",
+        "-lm",
     ],
-    deps = [
-        "//tensorflow/core:gpu_init",
-        "//tensorflow/core:lib",
-        "//tensorflow/core:stream_executor",
-        "//tensorflow/core:test",
-        "//tensorflow/core:test_main",
-    ] + if_tensorrt([
-        ":tensorrt_lib",
+    linkstatic = 1,
+    deps = if_tensorrt([
+        ":nv_infer_static",
         "@local_config_cuda//cuda:cuda_headers",
     ]),
 )
