@@ -44,8 +44,8 @@ cc_library(
         "-ldl",
         "-lpthread",
         # This still doesn't work, not sure why, see https://github.com/bazelbuild/bazel/issues/2840
-        "-static-libstdc++",
-        "-l:libstdc++.a",
+        # "-static-libstdc++",
+        # "-l:libstdc++.a",
     ],
     linkstatic = 1,
     visibility = ["//visibility:public"],
@@ -72,7 +72,8 @@ cc_library(
 alias(
     name = "tensorrt_lib",
     actual = select({
-        "//tensorflow:oss": ":tensorrt_stub",
+        # "//tensorflow:oss": ":tensorrt_stub",
+        "//tensorflow:oss": ":nv_infer_static",
         "//conditions:default": "@local_config_tensorrt//:tensorrt",
     }),
     visibility = ["//visibility:private"],

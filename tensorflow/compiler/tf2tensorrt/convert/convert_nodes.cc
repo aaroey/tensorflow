@@ -56,7 +56,9 @@ limitations under the License.
 #if GOOGLE_CUDA
 #if GOOGLE_TENSORRT
 #include "third_party/tensorrt/NvInfer.h"
+#ifdef GOOGLE_TENSORRT_PLUGIN
 #include "third_party/tensorrt/NvInferPlugin.h"
+#endif
 
 // Check if the types are equal. Cast to int first so that failure log message
 // would work!
@@ -1178,6 +1180,7 @@ Status TrtNodeValidator::ConvertConstToWeights(
 }
 
 static void InitializeTrtPlugins(nvinfer1::ILogger* trt_logger) {
+#ifdef GOOGLE_TENSORRT_PLUGIN
   static mutex plugin_mutex(LINKER_INITIALIZED);
   static bool plugin_initialized = false;
   mutex_lock lock(plugin_mutex);
@@ -1207,6 +1210,7 @@ static void InitializeTrtPlugins(nvinfer1::ILogger* trt_logger) {
       }
     }
   }
+#endif
 }
 
 // static
